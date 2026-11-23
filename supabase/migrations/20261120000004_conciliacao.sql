@@ -1,3 +1,6 @@
+-- Extensões ficam no schema "extensions" no Supabase hospedado
+set search_path = public, extensions;
+
 -- =====================================================================
 -- FINANCY — 0004 Extratos OFX e conciliação bancária
 -- =====================================================================

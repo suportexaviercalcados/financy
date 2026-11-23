@@ -1,3 +1,6 @@
+-- Extensões ficam no schema "extensions" no Supabase hospedado
+set search_path = public, extensions;
+
 -- =====================================================================
 -- FINANCY — 0008 Concessão de acesso de suporte e dados de demonstração
 -- =====================================================================

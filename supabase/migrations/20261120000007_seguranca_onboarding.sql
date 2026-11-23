@@ -1,3 +1,6 @@
+-- Extensões ficam no schema "extensions" no Supabase hospedado
+set search_path = public, extensions;
+
 -- =====================================================================
 -- FINANCY — 0007 RLS, onboarding, usuários/convites, storage, alertas,
 -- painel da plataforma e rotinas agendadas

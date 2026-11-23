@@ -1,3 +1,6 @@
+-- Extensões ficam no schema "extensions" no Supabase hospedado
+set search_path = public, extensions;
+
 -- =====================================================================
 -- FINANCY — 0001 Core: extensões, tenancy, helpers de permissão, cadastros
 -- =====================================================================

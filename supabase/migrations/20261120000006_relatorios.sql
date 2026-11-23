@@ -1,3 +1,6 @@
+-- Extensões ficam no schema "extensions" no Supabase hospedado
+set search_path = public, extensions;
+
 -- =====================================================================
 -- FINANCY — 0006 Relatórios: fonte única para DRE, DFC, fluxo de caixa,
 -- vendas por canal e dashboard. Todas as funções são SECURITY INVOKER:
