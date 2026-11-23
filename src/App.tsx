@@ -24,6 +24,7 @@ const IA = lazy(() => import('@/pages/IA'))
 const Admin = lazy(() => import('@/pages/Admin'))
 const Cad = lazy(() => import('@/pages/cadastros'))
 const Cfg = lazy(() => import('@/pages/config'))
+const AjudaBling = lazy(() => import('@/pages/AjudaBling'))
 
 function Protegido({ children }: { children: ReactNode }) {
   const { user, carregando } = useAuth()
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/recuperar" element={<Recuperar />} />
           <Route path="/nova-senha" element={<NovaSenha />} />
           <Route path="/convite/:token" element={<AceitarConvite />} />
+          <Route path="/ajuda/bling" element={<AjudaBling />} />
           <Route path="/onboarding" element={<SoLogado><Onboarding /></SoLogado>} />
           <Route element={<Protegido><AppLayout /></Protegido>}>
             <Route index element={<Dashboard />} />

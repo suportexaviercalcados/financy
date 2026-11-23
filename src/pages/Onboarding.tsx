@@ -264,7 +264,7 @@ function PassoBling({ orgId, onProximo }: { orgId: string; onProximo: () => void
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Conectar o Bling (opcional)</h2>
-      <p className="text-sm text-muted-foreground">Importe automaticamente pedidos de venda, produtos com custo, clientes, formas de pagamento e contas a pagar/receber pela API oficial do Bling (v3). A conexão usa OAuth: você autoriza no próprio Bling.</p>
+      <p className="text-sm text-muted-foreground">Importe automaticamente pedidos de venda, produtos com custo, clientes, formas de pagamento e contas a pagar/receber pela API oficial do Bling (v3). A conexão usa OAuth: você autoriza no próprio Bling. <a href="/ajuda/bling" target="_blank" rel="noopener" className="text-primary hover:underline">Como funciona</a></p>
       {erro && <Erro erro={erro} />}
       <div className="flex gap-2">
         <Button onClick={() => conectar.mutate()} disabled={conectar.isPending}>{conectar.isPending && <Spinner />}<Link2 />Conectar Bling</Button>

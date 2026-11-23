@@ -180,7 +180,8 @@ function Integracoes() {
   const retorno = sp.get('bling')
   return (
     <div className="space-y-6">
-      <PageHeader titulo="Integração com o Bling" descricao="API oficial Bling v3 com OAuth 2.0. Importa pedidos de venda, produtos (com custo), contatos, formas de pagamento e contas a pagar/receber." />
+      <PageHeader titulo="Integração com o Bling" descricao="API oficial Bling v3 com OAuth 2.0. Importa pedidos de venda, produtos (com custo), contatos, formas de pagamento e contas a pagar/receber."
+        acoes={<a href="/ajuda/bling" target="_blank" rel="noopener" className="text-sm text-primary hover:underline">Manual da integração</a>} />
       {concluindo && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Concluindo a conexão com o Bling…</p>}
       {retorno === 'ok' && <Aviso className="border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">Conta Bling conectada. A sincronização inicial foi agendada e roda em segundo plano.</Aviso>}
       {retorno === 'erro' && <Erro erro={`Não foi possível conectar ao Bling (${sp.get('motivo')}). Tente novamente; se persistir, verifique as credenciais do aplicativo na plataforma.`} />}
