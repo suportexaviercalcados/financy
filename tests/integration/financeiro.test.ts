@@ -441,6 +441,37 @@ describe('Concorrência e fechamento de período', () => {
   })
 })
 
+describe('Data de corte do caixa (histórico anterior ao saldo inicial)', () => {
+  it('venda antiga entra na DRE, mas não gera baixa, caixa nem título vencido', async () => {
+    const o = await novaOrganizacao(0)
+    const conta = await novaConta(o, 'Banco', 1000, '2026-10-01')
+    const canal = await novoCanal(o, 'Loja')
+    ok(await o.client.from('canal_taxas').insert({ organizacao_id: o.orgId, forma_pagamento_id: o.forma('pix'), conta_bancaria_id: conta, prazo_dias: 0 }))
+    ok(await o.client.from('canal_taxas').insert({ organizacao_id: o.orgId, forma_pagamento_id: o.forma('credito'), conta_bancaria_id: conta,
+      parcelas_min: 1, parcelas_max: 12, taxa_percentual: 3, prazo_dias: 30 }))
+    // PIX antes do corte: antes falhava com "Data da baixa anterior à data do saldo inicial"
+    const v1 = ok(await o.client.rpc('fn_registrar_venda', { p: { organizacao_id: o.orgId, empresa_id: o.empresaId, canal_id: canal,
+      data_venda: '2026-08-10', itens: [{ descricao: 'A', quantidade: 1, preco_unitario: 100 }],
+      pagamentos: [{ forma_pagamento_id: o.forma('pix'), valor: 100 }] } })) as string
+    // crédito 3x em setembro: parcelas de out/2026 em diante continuam abertas; a de set/out antes do corte é quitada
+    const v2 = ok(await o.client.rpc('fn_registrar_venda', { p: { organizacao_id: o.orgId, empresa_id: o.empresaId, canal_id: canal,
+      data_venda: '2026-08-20', itens: [{ descricao: 'B', quantidade: 1, preco_unitario: 300 }],
+      pagamentos: [{ forma_pagamento_id: o.forma('credito'), valor: 300, parcelas: 3 }] } })) as string
+    const t1 = ok(await o.client.from('titulos').select('status, liquidado_pre_corte').eq('venda_id', v1)) as any[]
+    expect(t1).toEqual([{ status: 'pago', liquidado_pre_corte: true }])
+    const t2 = ok(await o.client.from('titulos').select('data_vencimento, status, liquidado_pre_corte').eq('venda_id', v2).order('data_vencimento')) as any[]
+    expect(t2.map(t => [t.data_vencimento, t.status, t.liquidado_pre_corte])).toEqual([
+      ['2026-09-19', 'pago', true], ['2026-10-19', 'aberto', false], ['2026-11-18', 'aberto', false]])
+    expect(n(ok(await o.client.rpc('fn_saldo_total', { p_org: o.orgId, p_empresas: null, p_data: '2026-10-31' })))).toBe(1000)
+    const [d] = ok(await o.client.rpc('fn_dre', { p_org: o.orgId, p_empresas: null, p_ini: '2026-08-01', p_fim: '2026-08-31', p_gran: 'total' })) as any[]
+    expect(n(d.receita_bruta)).toBe(400)
+    // título quitado antes do corte não aceita baixa
+    const tq = ok(await o.client.from('titulos').select('id').eq('venda_id', v1).single()) as any
+    const b = await o.client.rpc('fn_baixar_titulo', { p_titulo: tq.id, p_conta: conta, p_data: '2026-10-05', p_valor_principal: 1 })
+    expect(b.error).toBeTruthy()
+  })
+})
+
 describe('Devoluções', () => {
   it('reduz receita, estorna CMV e gera reembolso', async () => {
     const o = await novaOrganizacao(0)

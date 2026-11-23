@@ -108,7 +108,7 @@ export default function Contas() {
       return (
         <div className="min-w-48">
           <div className="font-medium">{t.descricao}</div>
-          <div className="text-xs text-muted-foreground">{t.contatos?.nome ?? ''}{t.documento ? ` · doc ${t.documento}` : ''}{t.origem !== 'manual' ? ` · ${t.origem}` : ''}</div>
+          <div className="text-xs text-muted-foreground">{t.contatos?.nome ?? ''}{t.documento ? ` · doc ${t.documento}` : ''}{t.origem !== 'manual' ? ` · ${t.origem}` : ''}{(t as any).liquidado_pre_corte ? ' · quitado antes do corte do caixa' : ''}</div>
           {s && podeEscrever && (
             <div className="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-primary/5 px-2 py-1 text-xs" onClick={e => e.stopPropagation()}>
               <Sparkles className="size-3 text-primary" />IA sugere <b>{s.sugestao.categoria}</b> ({Math.round(s.confianca * 100)}%)
