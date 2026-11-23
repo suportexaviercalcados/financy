@@ -16,9 +16,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
+
+// situacao.valor dos pedidos de venda no Bling (Cancelado e Em digitação nunca são importados)
+const SITUACOES_PEDIDO: [number, string][] = [[1, 'Atendido'], [11, 'Verificado'], [8, 'Pagamento confirmado'], [6, 'Atendido parcialmente'],
+  [5, 'Faturado parcialmente'], [3, 'Em andamento'], [7, 'Aguardando pagamento'], [12, 'Checkout parcial'], [0, 'Em aberto']]
 
 const PAPEIS: { value: Papel; label: string; desc: string }[] = [
   { value: 'proprietario', label: 'Proprietário', desc: 'Acesso total, incluindo assinatura, usuários e integrações.' },
@@ -215,6 +220,22 @@ function Integracoes() {
                     <Campo rotulo="Importar pedidos de venda" ajuda="Desligado: contas a receber de pedidos do Bling são importadas como títulos.">
                       <Switch checked={i.config?.importar_vendas !== false} disabled={!podeAdministrar} onCheckedChange={v => salvarCfg(i, { importar_vendas: v })} /></Campo>
                   </Grade>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Importar pedidos com o status</p>
+                    <p className="text-xs text-muted-foreground">Pedidos em outros status ficam de fora e entram automaticamente quando mudarem para um status marcado. Pedidos cancelados no Bling são sempre cancelados aqui.</p>
+                    <div className="flex flex-wrap gap-2">
+                      {SITUACOES_PEDIDO.map(([v, r]) => {
+                        const atuais: number[] = i.config?.situacoes_importar ?? [1, 11, 8, 3]
+                        const marcado = atuais.includes(v)
+                        return (
+                          <label key={v} className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm">
+                            <Checkbox checked={marcado} disabled={!podeAdministrar || (marcado && atuais.length === 1)}
+                              onCheckedChange={(c) => salvarCfg(i, { situacoes_importar: c ? [...atuais, v] : atuais.filter(x => x !== v) })} />{r}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </TabsContent>
                 <TabsContent value="map" className="pt-3"><Mapeamentos integracao={i.id} /></TabsContent>
                 <TabsContent value="jobs" className="pt-3"><Jobs integracao={i.id} /></TabsContent>

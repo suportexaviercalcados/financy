@@ -2,7 +2,7 @@
 // Disparo: pg_cron (header x-cron-secret) a cada 10 min, ou usuário admin (POST { integracao_id }) para sincronizar agora.
 // Idempotência: vendas/títulos/produtos/contatos usam (organizacao_id, origem='bling', external_id) únicos.
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
-import { BlingApi, BlingErro, SITUACAO_PEDIDO_CANCELADO, SITUACAO_PEDIDO_EM_DIGITACAO, tipoFormaBling } from '../_shared/bling.ts'
+import { BlingApi, BlingErro, SITUACAO_PEDIDO_CANCELADO, SITUACOES_IMPORTAR_PADRAO, tipoFormaBling } from '../_shared/bling.ts'
 import { corsHeaders, env, igualSeguro, json, log, serviceClient, usuarioAutenticado } from '../_shared/util.ts'
 
 const ORCAMENTO_MS = 100_000   // tempo máximo por execução (limite de wall-clock da Edge Function) antes de salvar cursor
@@ -147,9 +147,13 @@ async function contatoId(c: Contexto, contato: any): Promise<string | null> {
 /** Importa (ou cancela) um pedido de venda do Bling. Retorna true se criou/alterou algo. */
 async function importarPedido(c: Contexto, resumo: any, cache: { formas: Map<string, string | null>; lojas: Map<string, string | null>; formaPadrao: string; canalPadrao: string }) {
   const externo = String(resumo.id)
-  const { data: existente } = await c.svc.from('vendas').select('id, status').eq('organizacao_id', c.org)
+  const { data: existente } = await c.svc.from('vendas').select('id, status, situacao_externa').eq('organizacao_id', c.org)
     .eq('origem', 'bling').eq('external_id', externo).maybeSingle()
   const situacao = Number(resumo.situacao?.valor)
+  // mantém o status do Bling atualizado nas vendas já importadas (a listagem já traz situacao.valor)
+  if (existente && !Number.isNaN(situacao) && existente.situacao_externa !== situacao) {
+    await c.svc.from('vendas').update({ situacao_externa: situacao }).eq('id', existente.id)
+  }
   if (situacao === SITUACAO_PEDIDO_CANCELADO) {
     if (existente && existente.status !== 'cancelada') {
       const { error } = await c.svc.rpc('fn_cancelar_venda', { p_venda: existente.id })
@@ -158,8 +162,10 @@ async function importarPedido(c: Contexto, resumo: any, cache: { formas: Map<str
     }
     return false
   }
-  const ignorar: number[] = c.integ.config?.situacoes_ignorar ?? [SITUACAO_PEDIDO_EM_DIGITACAO]
-  if (existente || ignorar.includes(situacao)) return false
+  // Só importa pedidos nos status escolhidos (padrão: Atendido, Verificado, Pagamento confirmado e Em andamento). Pedidos em outros status
+  // entram quando mudarem para um status permitido (a sincronização incremental vê a alteração).
+  const permitidas: number[] = c.integ.config?.situacoes_importar ?? SITUACOES_IMPORTAR_PADRAO
+  if (existente || !permitidas.includes(situacao)) return false
 
   const { data: d } = await c.api.get<{ data: any }>(`/pedidos/vendas/${externo}`)
   if (!d) return false
@@ -204,6 +210,8 @@ async function importarPedido(c: Contexto, resumo: any, cache: { formas: Map<str
     observacoes: d.numeroLoja ? `Pedido loja ${d.numeroLoja}` : null, itens, pagamentos,
   } })
   if (error) { await c.logar('erro', `Pedido ${d.numero}: ${error.message}`, { pedido: externo }); return false }
+  await c.svc.from('vendas').update({ situacao_externa: Number(d.situacao?.valor ?? situacao) })
+    .eq('organizacao_id', c.org).eq('origem', 'bling').eq('external_id', externo)
   return true
 }
 

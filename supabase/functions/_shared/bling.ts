@@ -127,3 +127,8 @@ export function tipoFormaBling(tipoPagamento: number): string {
 
 export const SITUACAO_PEDIDO_CANCELADO = 2   // situacao.valor: 0 aberto, 1 atendido, 2 cancelado, 3 em andamento...
 export const SITUACAO_PEDIDO_EM_DIGITACAO = 10
+// situacao.valor do pedido de venda (OpenAPI Bling v3)
+export const SITUACOES_PEDIDO: Record<number, string> = { 0: 'Em aberto', 1: 'Atendido', 2: 'Cancelado', 3: 'Em andamento',
+  5: 'Faturado parcialmente', 6: 'Atendido parcialmente', 7: 'Aguardando pagamento', 8: 'Pagamento confirmado',
+  10: 'Em digitação', 11: 'Verificado', 12: 'Checkout parcial' }
+export const SITUACOES_IMPORTAR_PADRAO = [1, 11, 8, 3]   // Atendido, Verificado, Pagamento confirmado, Em andamento
