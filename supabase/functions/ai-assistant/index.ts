@@ -133,6 +133,11 @@ Deno.serve(async (req) => {
   const org = body.organizacao_id as string
   const { data: membro } = await auth.client.from('organizacoes').select('id').eq('id', org).maybeSingle()
   if (!membro) return json({ erro: 'Sem acesso a esta organização' }, 403)
+  // Ações que gravam (sugestões / aplicação automática) exigem papel com escrita: visualizador só consulta
+  if (['categorizar', 'conciliar', 'alertas'].includes(acao)) {
+    const { data: podeEscrever } = await auth.client.rpc('fn_can_write', { org })
+    if (!podeEscrever) return json({ erro: 'Seu perfil é somente leitura para esta ação.' }, 403)
+  }
   if (!Deno.env.get('OPENROUTER_API_KEY')) {
     return json({ erro: 'A IA ainda não foi configurada nesta plataforma (OPENROUTER_API_KEY ausente). Veja docs/OPENROUTER.md.' }, 503)
   }
@@ -271,8 +276,8 @@ async function categorizar(svc: SupabaseClient, db: SupabaseClient, org: string,
     const confianca = Math.max(0, Math.min(1, Number(s.confianca) || 0))
     // aplicação automática somente para categoria de títulos, acima do nível configurado (nunca cria baixas)
     const auto = alvo === 'titulos' && cfg?.auto_aplicar && confianca >= Number(cfg.nivel_confianca)
-    await svc.from('ia_sugestoes').delete().eq('alvo_tabela', alvo).eq('alvo_id', s.id).eq('tipo', 'categoria').eq('status', 'pendente')
-    await svc.from('ia_sugestoes').insert({ organizacao_id: org, execucao_id: execId, tipo: 'categoria', alvo_tabela: alvo, alvo_id: s.id,
+    await db.from('ia_sugestoes').delete().eq('alvo_tabela', alvo).eq('alvo_id', s.id).eq('tipo', 'categoria').eq('status', 'pendente')
+    await db.from('ia_sugestoes').insert({ organizacao_id: org, execucao_id: execId, tipo: 'categoria', alvo_tabela: alvo, alvo_id: s.id,
       sugestao: { categoria_id: cat.id, categoria: `${cat.codigo} ${cat.nome}`, justificativa: s.justificativa }, confianca,
       status: auto ? 'aplicada_auto' : 'pendente', decidido_em: auto ? new Date().toISOString() : null })
     if (auto) { const { error } = await db.from('titulos').update({ categoria_id: cat.id }).eq('id', s.id); if (!error) aplicadas++ }
@@ -310,8 +315,8 @@ async function conciliar(svc: SupabaseClient, db: SupabaseClient, org: string, m
   for (const s of resp) {
     const caso = casos.find(c => c.transacao.id === s.transacao_id)
     if (!caso || !s.titulo_id || !caso.candidatos.some(c => c.id === s.titulo_id)) continue
-    await svc.from('ia_sugestoes').delete().eq('alvo_tabela', 'transacoes_bancarias').eq('alvo_id', s.transacao_id).eq('tipo', 'conciliacao').eq('status', 'pendente')
-    await svc.from('ia_sugestoes').insert({ organizacao_id: org, execucao_id: execId, tipo: 'conciliacao', alvo_tabela: 'transacoes_bancarias',
+    await db.from('ia_sugestoes').delete().eq('alvo_tabela', 'transacoes_bancarias').eq('alvo_id', s.transacao_id).eq('tipo', 'conciliacao').eq('status', 'pendente')
+    await db.from('ia_sugestoes').insert({ organizacao_id: org, execucao_id: execId, tipo: 'conciliacao', alvo_tabela: 'transacoes_bancarias',
       alvo_id: s.transacao_id, sugestao: { alvo_tipo: 'titulo', alvo_id: s.titulo_id, justificativa: s.justificativa },
       confianca: Math.max(0, Math.min(1, Number(s.confianca) || 0)) })
     n++

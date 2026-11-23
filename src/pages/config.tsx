@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Link2, Lock, LockOpen, Mail, RefreshCw, Trash2, Unplug } from 'lucide-react'
@@ -153,7 +153,19 @@ function Usuarios() {
 }
 
 function Integracoes() {
-  const { org, empresas, podeAdministrar } = useOrg(); const qc = useQueryClient(); const [sp] = useSearchParams()
+  const { org, empresas, podeAdministrar } = useOrg(); const qc = useQueryClient(); const [sp, setSp] = useSearchParams()
+  // Retorno do OAuth: o código é trocado pelo backend em nome do usuário logado que iniciou o fluxo
+  const callbackFeito = useRef(false)
+  const [concluindo, setConcluindo] = useState(!!sp.get('bling_code'))
+  useEffect(() => {
+    const code = sp.get('bling_code'); const state = sp.get('bling_state')
+    if (!code || !state || callbackFeito.current) return
+    callbackFeito.current = true
+    edge('bling-oauth', { action: 'callback', code, state })
+      .then(() => { setSp({ bling: 'ok' }, { replace: true }); qc.invalidateQueries() })
+      .catch((e: Error) => setSp({ bling: 'erro', motivo: e.message }, { replace: true }))
+      .finally(() => setConcluindo(false))
+  }, [sp, setSp, qc])
   const contas = useContasBancarias()
   const integ = useQuery({ queryKey: ['integracoes', org?.id], enabled: !!org, queryFn: async () => unwrap(await supabase.from('integracoes').select('*').eq('organizacao_id', org!.id)) as any[] })
   const [inicio, setInicio] = useState(somaMeses(inicioMes(hoje()), -12))
@@ -169,6 +181,7 @@ function Integracoes() {
   return (
     <div className="space-y-6">
       <PageHeader titulo="Integração com o Bling" descricao="API oficial Bling v3 com OAuth 2.0. Importa pedidos de venda, produtos (com custo), contatos, formas de pagamento e contas a pagar/receber." />
+      {concluindo && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Concluindo a conexão com o Bling…</p>}
       {retorno === 'ok' && <Aviso className="border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">Conta Bling conectada. A sincronização inicial foi agendada e roda em segundo plano.</Aviso>}
       {retorno === 'erro' && <Erro erro={`Não foi possível conectar ao Bling (${sp.get('motivo')}). Tente novamente; se persistir, verifique as credenciais do aplicativo na plataforma.`} />}
       {empresas.map(e => {

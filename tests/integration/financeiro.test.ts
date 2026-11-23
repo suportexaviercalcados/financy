@@ -355,6 +355,37 @@ describe('Isolamento entre organizações (RLS)', () => {
     expect(up.error).toBeTruthy()   // coluna protegida mesmo para o proprietário
   })
 
+  it('convite não altera o papel de quem já é membro', async () => {
+    ok(await a.client.from('convites').insert({ organizacao_id: a.orgId, email: a.email, papel: 'visualizador' }))
+    const conv = ok(await a.client.rpc('fn_meus_convites')) as any[]
+    ok(await a.client.rpc('fn_aceitar_convite', { p_token: conv[0].token }))
+    const m = ok(await a.client.from('membros').select('papel').eq('organizacao_id', a.orgId).eq('user_id', a.userId).single()) as any
+    expect(m.papel).toBe('proprietario')
+  })
+
+  it('callback OAuth do Bling só é aceito pelo usuário que iniciou o fluxo', async () => {
+    const integ = ok(await admin.from('integracoes').insert({ organizacao_id: a.orgId, empresa_id: a.empresaId }).select('id').single()) as any
+    ok(await admin.from('oauth_states').insert({ state: 'st-teste-' + a.orgId, integracao_id: integ.id, user_id: a.userId }))
+    const r = await b.client.functions.invoke('bling-oauth', { body: { action: 'callback', code: 'x', state: 'st-teste-' + a.orgId } })
+    expect((r.error as any)?.context?.status).toBe(403)
+    const estado = ok(await admin.from('oauth_states').select('state').eq('integracao_id', integ.id)) as any[]
+    expect(estado).toHaveLength(1)   // não foi consumido pelo atacante
+    const tokens = ok(await admin.from('integracao_tokens').select('integracao_id').eq('integracao_id', integ.id)) as any[]
+    expect(tokens).toHaveLength(0)
+  })
+
+  it('visualizador não grava sugestões de IA', async () => {
+    const v = await novoUsuario('viewer2')
+    ok(await a.client.from('convites').insert({ organizacao_id: a.orgId, email: v.email, papel: 'visualizador' }))
+    const conv = ok(await v.client.rpc('fn_meus_convites')) as any[]
+    ok(await v.client.rpc('fn_aceitar_convite', { p_token: conv[0].token }))
+    const r = await v.client.functions.invoke('ai-assistant', { body: { acao: 'categorizar', organizacao_id: a.orgId, ids: [] } })
+    expect((r.error as any)?.context?.status).toBe(403)   // perfil somente leitura
+    const ins = await v.client.from('ia_sugestoes').insert({ organizacao_id: a.orgId, tipo: 'categoria', alvo_tabela: 'titulos',
+      alvo_id: a.orgId, sugestao: {}, confianca: 1 })
+    expect(ins.error).toBeTruthy()
+  })
+
   it('valor pago e status só mudam por baixa', async () => {
     const [t] = ok(await a.client.rpc('fn_criar_titulos', { p: { organizacao_id: a.orgId, empresa_id: a.empresaId,
       tipo: 'pagar', descricao: 'Teste', categoria_id: a.catCodigo('5.3.4'), valor: 50, data_vencimento: '2026-09-10' } })) as string[]

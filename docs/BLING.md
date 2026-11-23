@@ -36,7 +36,7 @@ As URLs e campos foram conferidos no OpenAPI oficial publicado em https://develo
    ```bash
    npx supabase secrets set BLING_CLIENT_ID=... BLING_CLIENT_SECRET=... APP_URL=https://seu-app.vercel.app
    ```
-3. No sistema, acesse **Configurações → Integração Bling**, escolha a data inicial do histórico e clique em **Conectar Bling**. O usuário autoriza no Bling e volta com a sincronização inicial agendada.
+3. No sistema, acesse **Configurações → Integração Bling**, escolha a data inicial do histórico e clique em **Conectar Bling**. O usuário autoriza no Bling e é devolvido ao app. O app conclui a conexão numa chamada autenticada, e o backend só aceita a autorização se ela vier do mesmo usuário que iniciou o fluxo (proteção contra CSRF). Em seguida, a sincronização inicial é agendada.
 4. A sincronização incremental roda a cada 10 minutos pelo `pg_cron`, desde que o Vault esteja configurado (ver docs/DEPLOY.md). Também pode ser disparada em **Sincronizar agora**.
 5. Revise os **Mapeamentos** de loja → canal, formas de pagamento e categorias. Configure as taxas por canal e forma em **Cadastros → Canais e taxas**: elas definem os recebíveis líquidos dos pedidos importados.
 
