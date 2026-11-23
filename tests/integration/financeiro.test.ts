@@ -3,6 +3,7 @@
  * Pré-requisito: `npx supabase start` e .env.test.local preenchido (ver README).
  */
 import { describe, it, expect, beforeAll } from 'vitest'
+import { createClient } from '@supabase/supabase-js'
 import { admin, novaOrganizacao, novaConta, novoCanal, novoUsuario, ok, hoje, somaDias, n, type Org } from './helpers'
 
 // Mês fechado de referência para DRE/DFC (no passado, determinístico)
@@ -469,6 +470,14 @@ describe('Data de corte do caixa (histórico anterior ao saldo inicial)', () => 
     const tq = ok(await o.client.from('titulos').select('id').eq('venda_id', v1).single()) as any
     const b = await o.client.rpc('fn_baixar_titulo', { p_titulo: tq.id, p_conta: conta, p_data: '2026-10-05', p_valor_principal: 1 })
     expect(b.error).toBeTruthy()
+    // quitação sem baixa é interna: nem usuário logado nem chamada anônima conseguem executar direto
+    const aberto = t2.find(t => t.status === 'aberto')
+    const tAberto = ok(await o.client.from('titulos').select('id').eq('venda_id', v2).eq('data_vencimento', aberto.data_vencimento).single()) as any
+    expect((await o.client.rpc('fn_liquidar_pre_corte', { p_titulo: tAberto.id })).error).toBeTruthy()
+    const anon = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, { auth: { persistSession: false } })
+    expect((await anon.rpc('fn_liquidar_pre_corte', { p_titulo: tAberto.id })).error).toBeTruthy()
+    const depois = ok(await o.client.from('titulos').select('status').eq('id', tAberto.id).single()) as any
+    expect(depois.status).toBe('aberto')
   })
 })
 
