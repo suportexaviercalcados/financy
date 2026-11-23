@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase, rpc } from '@/lib/supabase'
 import { useAuth } from '@/contexts/auth'
@@ -16,7 +15,7 @@ function Moldura({ titulo, sub, children, rodape }: { titulo: string; sub?: stri
       <div className="flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><FileSpreadsheet className="size-4" /></div>
+            <img src="/logo.svg" alt="" className="size-8 rounded-lg" />
             <span className="text-lg font-semibold">Financy</span>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">{titulo}</h1>

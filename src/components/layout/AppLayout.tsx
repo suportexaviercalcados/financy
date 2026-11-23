@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeftRight, Banknote, Bell, BookOpen, Bot, Building2, CalendarClock, ChartColumn, ChevronsLeft, ChevronsRight, CircleDollarSign,
-  ClipboardList, CreditCard, FileBarChart, FileSpreadsheet, Gauge, HandCoins, Landmark, LayoutDashboard, Link2, LogOut, Menu, Monitor,
+  ClipboardList, CreditCard, FileBarChart, Gauge, HandCoins, Landmark, LayoutDashboard, Link2, LogOut, Menu, Monitor,
   Moon, Package, PiggyBank, Receipt, Repeat, ScrollText, Settings, Shield, ShoppingBag, Store, Sun, Tags, Target, Users, Wallet, Waypoints, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -138,7 +138,7 @@ export function AppLayout() {
 function Marca({ recolhido }: { recolhido: boolean }) {
   return (
     <div className={cn('flex h-14 items-center gap-2 px-4', recolhido && 'justify-center px-0')}>
-      <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground"><FileSpreadsheet className="size-4" /></div>
+      <img src="/logo.svg" alt="" className="size-7 rounded-lg" />
       {!recolhido && <span className="font-semibold tracking-tight">Financy</span>}
     </div>
   )

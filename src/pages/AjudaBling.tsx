@@ -1,7 +1,7 @@
 // Manual público da integração com o Bling (usado como "Link do manual" no cadastro do aplicativo no Bling)
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, CheckCircle2, FileSpreadsheet, KeyRound, Link2, RefreshCw, ShieldCheck, Unplug, Wrench } from 'lucide-react'
+import { ArrowLeftRight, CheckCircle2, KeyRound, Link2, RefreshCw, ShieldCheck, Unplug, Wrench } from 'lucide-react'
 import { useAuth } from '@/contexts/auth'
 import { Card } from '@/components/ui/card'
 
@@ -36,7 +36,7 @@ export default function AjudaBling() {
       <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <Link to="/" className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground"><FileSpreadsheet className="size-4" /></span>
+            <img src="/logo.svg" alt="" className="size-7 rounded-lg" />
             <span className="font-semibold">Financy</span>
             <span className="hidden text-sm text-muted-foreground sm:inline">· Central de ajuda</span>
           </Link>
