@@ -15,6 +15,7 @@ import { DataTable, type Coluna } from '@/components/DataTable'
 import { Campo, EntradaValor, Grade, Seletor } from '@/components/form'
 import { Confirmar, Erro, PageHeader, Spinner, Status } from '@/components/common'
 import { traduzirErro } from '@/components/CrudPage'
+import { cn } from '@/lib/utils'
 import { ImportarContas } from '@/components/ImportarContas'
 
 export interface Titulo {
@@ -74,6 +75,16 @@ export default function Contas() {
     queryFn: async () => unwrap(await supabase.from('ia_sugestoes').select('*').eq('organizacao_id', org!.id).eq('alvo_tabela', 'titulos')
       .eq('status', 'pendente').in('alvo_id', ids.slice(0, 300))) as any[],
   })
+  // quantidade e tipos de anexos por título (indicador na lista)
+  const anexosQ = useQuery({
+    queryKey: ['anexos-contagem', org?.id, ids.slice(0, 500).join(',')], enabled: !!org && ids.length > 0,
+    queryFn: async () => {
+      const r = unwrap(await supabase.from('titulo_anexos').select('titulo_id, tipo').in('titulo_id', ids.slice(0, 500))) as { titulo_id: string; tipo: string }[]
+      const m = new Map<string, string[]>()
+      for (const a of r) m.set(a.titulo_id, [...(m.get(a.titulo_id) ?? []), a.tipo])
+      return m
+    },
+  })
   const decidir = useMutation({
     mutationFn: async ({ s, aceitar }: { s: any; aceitar: boolean }) => {
       if (aceitar) unwrap(await supabase.from('titulos').update({ categoria_id: s.sugestao.categoria_id }).eq('id', s.alvo_id))
@@ -131,7 +142,12 @@ export default function Contas() {
       <div className="flex justify-end gap-0.5" onClick={e => e.stopPropagation()}>
         {podeEscrever && ['aberto', 'parcial', 'pago'].includes(t.status) &&
           <Button size="sm" variant={t.status === 'pago' ? 'ghost' : 'outline'} onClick={() => setBaixa(t)}><Wallet />{t.status === 'pago' ? 'Baixas' : 'Baixar'}</Button>}
-        <Button size="icon-sm" variant="ghost" aria-label="Anexos" onClick={() => setAnexos(t)}><Paperclip /></Button>
+        {(() => {
+          const tipos = anexosQ.data?.get(t.id) ?? []
+          const resumo = tipos.length ? [...new Set(tipos)].map(x => TIPOS_ANEXO.find(y => y.value === x)?.label ?? x).join(', ') : 'Sem anexos'
+          return <Button size="sm" variant="ghost" className={cn('px-2', tipos.length && 'text-primary')} aria-label={`Anexos: ${resumo}`} title={resumo}
+            onClick={() => setAnexos(t)}><Paperclip />{tipos.length > 0 && <span className="tabular">{tipos.length}</span>}</Button>
+        })()}
         {podeEscrever && t.status !== 'cancelado' && !t.venda_id && <Button size="icon-sm" variant="ghost" aria-label="Editar" onClick={() => setForm(t)}><Pencil /></Button>}
         {podeEscrever && Number(t.valor_pago) === 0 && t.status !== 'cancelado' && <Button size="icon-sm" variant="ghost" aria-label="Cancelar" onClick={() => setCancelar(t)}><Ban /></Button>}
         {podeEscrever && Number(t.valor_pago) === 0 && t.origem === 'manual' && <Button size="icon-sm" variant="ghost" aria-label="Excluir" onClick={() => setExcluir(t)}><Trash2 /></Button>}
@@ -191,6 +207,8 @@ export function TituloForm({ inicial, onFechar }: { inicial: Partial<Titulo>; on
     data_competencia: inicial.data_competencia ?? '', documento: inicial.documento ?? '', observacoes: inicial.observacoes ?? '', competencia_por_parcela: false,
   })
   const [erro, setErro] = useState<string | null>(null)
+  const [arquivo, setArquivo] = useState<File | null>(null)
+  const [tipoArquivo, setTipoArquivo] = useState(tipo === 'pagar' ? 'boleto' : 'nota_fiscal')
   const set = (k: string, v: unknown) => setF((x: any) => ({ ...x, [k]: v }))
   const m = useMutation({
     mutationFn: async () => {
@@ -207,10 +225,15 @@ export function TituloForm({ inicial, onFechar }: { inicial: Partial<Titulo>; on
         if (!r?.length) throw new Error('Este título foi alterado por outro usuário. Recarregue a lista e tente novamente.')
         return
       }
-      await rpc('fn_criar_titulos', { p: { organizacao_id: org!.id, empresa_id: f.empresa_id, tipo, descricao: f.descricao.trim(),
+      const ids = await rpc<string[]>('fn_criar_titulos', { p: { organizacao_id: org!.id, empresa_id: f.empresa_id, tipo, descricao: f.descricao.trim(),
         contato_id: f.contato_id, categoria_id: f.categoria_id, centro_custo_id: f.centro_custo_id, canal_id: f.canal_id, valor: f.valor,
         parcelas: f.parcelas, data_vencimento: f.data_vencimento, data_competencia: f.data_competencia || null, documento: f.documento || null,
         observacoes: f.observacoes || null, competencia_por_parcela: f.competencia_por_parcela } })
+      // anexo vai para a 1ª parcela (as demais recebem os seus pelo botão de anexos da linha)
+      if (arquivo && ids?.length) {
+        try { await enviarAnexo({ id: ids[0], organizacao_id: org!.id }, arquivo, tipoArquivo) }
+        catch (e) { toast.error(`Conta criada, mas o anexo falhou: ${(e as Error).message}`) }
+      }
     },
     onSuccess: () => { toast.success(editando ? 'Título atualizado.' : 'Título criado.'); qc.invalidateQueries({ queryKey: ['titulos'] }); onFechar() },
     onError: (e: Error) => setErro(traduzirErro(e.message)),
@@ -236,6 +259,16 @@ export function TituloForm({ inicial, onFechar }: { inicial: Partial<Titulo>; on
               opcoes={[{ value: '', label: 'Todas na mesma competência' }, { value: '1', label: 'Uma competência por mês' }]} /></Campo>}
             <Campo rotulo="Nº do documento"><Input value={f.documento} onChange={e => set('documento', e.target.value)} /></Campo>
             <Campo rotulo="Observações" className="sm:col-span-2"><Textarea value={f.observacoes} onChange={e => set('observacoes', e.target.value)} /></Campo>
+            {!editando && (
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <span className="text-sm font-medium">Anexo (opcional)</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Seletor aria-label="Tipo do anexo" className="w-auto" value={tipoArquivo} onChange={e => setTipoArquivo(e.target.value)} opcoes={TIPOS_ANEXO} />
+                  <CampoArquivo arquivo={arquivo} onChange={setArquivo} rotulo="Escolher arquivo" />
+                </div>
+                {f.parcelas > 1 && arquivo && <span className="text-xs text-muted-foreground">O arquivo será anexado à 1ª parcela.</span>}
+              </div>
+            )}
           </Grade>
           {erro && <div className="mt-4"><Erro erro={erro} /></div>}
         </form>
@@ -256,6 +289,7 @@ export function BaixaDialog({ titulo, onFechar }: { titulo: Titulo; onFechar: ()
   const [chave] = useState(() => crypto.randomUUID())
   const [f, setF] = useState({ conta: titulo.conta_bancaria_prevista_id ?? '', data: hoje(), principal: s, juros: 0, multa: 0, desconto: 0, obs: '' })
   const [erro, setErro] = useState<string | null>(null)
+  const [comprovante, setComprovante] = useState<File | null>(null)
   const baixas = useQuery({ queryKey: ['baixas', titulo.id], queryFn: async () =>
     unwrap(await supabase.from('baixas').select('*, contas_bancarias(nome), movimentos(conciliado)').eq('titulo_id', titulo.id).order('data_pagamento')) as any[] })
   const contasEmp = (contas.data ?? []).filter(c => c.empresa_id === titulo.empresa_id && c.ativo)
@@ -266,10 +300,14 @@ export function BaixaDialog({ titulo, onFechar }: { titulo: Titulo; onFechar: ()
       if (!f.conta) throw new Error('Escolha a conta bancária.')
       if (!(f.principal > 0)) throw new Error('Informe o valor principal.')
       if (f.principal > s + 0.001) throw new Error(`O valor principal excede o saldo em aberto (${brl(s)}). Lance juros/multa separadamente.`)
-      return rpc('fn_baixar_titulo', { p_titulo: titulo.id, p_conta: f.conta, p_data: f.data, p_valor_principal: f.principal,
+      await rpc('fn_baixar_titulo', { p_titulo: titulo.id, p_conta: f.conta, p_data: f.data, p_valor_principal: f.principal,
         p_juros: f.juros || 0, p_multa: f.multa || 0, p_desconto: f.desconto || 0, p_observacao: f.obs || null, p_idempotency_key: chave })
+      if (comprovante) {
+        try { await enviarAnexo(titulo, comprovante, 'comprovante') }
+        catch (e) { toast.error(`Baixa registrada, mas o comprovante não foi anexado: ${(e as Error).message}`) }
+      }
     },
-    onSuccess: () => { toast.success('Baixa registrada.'); invalidar(); onFechar() },
+    onSuccess: () => { toast.success('Baixa registrada.'); invalidar(); qc.invalidateQueries({ queryKey: ['anexos-contagem'] }); onFechar() },
     onError: (e: Error) => setErro(e.message),
   })
   const estornar = useMutation({
@@ -309,6 +347,10 @@ export function BaixaDialog({ titulo, onFechar }: { titulo: Titulo; onFechar: ()
               <Campo rotulo="Desconto"><EntradaValor valor={f.desconto} onChange={v => setF({ ...f, desconto: v })} /></Campo>
               <Campo rotulo="Observação" className="sm:col-span-2"><Input value={f.obs} onChange={e => setF({ ...f, obs: e.target.value })} /></Campo>
             </Grade>
+            <div className="mt-3 flex flex-col gap-1.5">
+              <span className="text-sm font-medium">{titulo.tipo === 'pagar' ? 'Comprovante de pagamento' : 'Comprovante de recebimento'} (opcional)</span>
+              <CampoArquivo arquivo={comprovante} onChange={setComprovante} rotulo="Anexar comprovante" />
+            </div>
             <p className="mt-3 text-sm">Valor movimentado na conta: <b className="tabular">{brl(total)}</b></p>
             {erro && <div className="mt-3"><Erro erro={erro} /></div>}
           </form>
@@ -353,20 +395,46 @@ function BaixaLoteDialog({ titulos, contas, onFechar }: { titulos: Titulo[]; con
   )
 }
 
+export const TIPOS_ANEXO = [{ value: 'boleto', label: 'Boleto' }, { value: 'comprovante', label: 'Comprovante de pagamento' },
+  { value: 'nota_fiscal', label: 'Nota fiscal' }, { value: 'outro', label: 'Outro' }]
+const rotuloAnexo = (t: string) => TIPOS_ANEXO.find(x => x.value === t)?.label ?? 'Outro'
+const ACEITOS = '.pdf,.png,.jpg,.jpeg,.webp,.xml'
+
+/** Envia um arquivo ao Storage (pasta da organização) e registra o anexo do título */
+export async function enviarAnexo(titulo: Pick<Titulo, 'id' | 'organizacao_id'>, arq: File, tipo: string) {
+  if (arq.size > 20 * 1024 * 1024) throw new Error(`"${arq.name}" é maior que 20 MB.`)
+  const caminho = `${titulo.organizacao_id}/titulos/${titulo.id}/${crypto.randomUUID()}-${arq.name.replace(/[^\w.-]+/g, '_')}`
+  const up = await supabase.storage.from('anexos').upload(caminho, arq, { contentType: arq.type || 'application/octet-stream' })
+  if (up.error) throw new Error(up.error.message)
+  const r = await supabase.from('titulo_anexos').insert({ organizacao_id: titulo.organizacao_id, titulo_id: titulo.id, storage_path: caminho,
+    nome: arq.name, mime: arq.type, tamanho: arq.size, tipo })
+  if (r.error) { await supabase.storage.from('anexos').remove([caminho]); throw new Error(r.error.message) }
+}
+
+/** Campo de arquivo compacto para anexar junto com outra ação (criação da conta, baixa) */
+export function CampoArquivo({ arquivo, onChange, rotulo }: { arquivo: File | null; onChange: (f: File | null) => void; rotulo: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm hover:bg-muted/40">
+        <Paperclip className="size-4" />{arquivo ? 'Trocar arquivo' : rotulo}
+        <input type="file" className="sr-only" accept={ACEITOS} onChange={e => { const f = e.target.files?.[0] ?? null; e.target.value = ''; onChange(f) }} />
+      </label>
+      {arquivo && <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"><span className="truncate">{arquivo.name}</span>
+        <button type="button" aria-label="Remover arquivo" onClick={() => onChange(null)}><X className="size-3.5" /></button></span>}
+    </div>
+  )
+}
+
 export function AnexosDialog({ titulo, onFechar }: { titulo: Titulo; onFechar: () => void }) {
   const qc = useQueryClient(); const { podeEscrever } = useOrg()
   const [enviando, setEnviando] = useState(false)
+  const [tipo, setTipo] = useState(titulo.status === 'pago' ? 'comprovante' : 'boleto')
   const q = useQuery({ queryKey: ['anexos', titulo.id], queryFn: async () => unwrap(await supabase.from('titulo_anexos').select('*').eq('titulo_id', titulo.id).order('created_at')) as any[] })
-  const enviar = async (arq: File) => {
-    if (arq.size > 20 * 1024 * 1024) return toast.error('Arquivo maior que 20 MB.')
+  const invalidar = () => { qc.invalidateQueries({ queryKey: ['anexos', titulo.id] }); qc.invalidateQueries({ queryKey: ['anexos-contagem'] }) }
+  const enviar = async (arquivos: File[]) => {
     setEnviando(true)
-    const caminho = `${titulo.organizacao_id}/titulos/${titulo.id}/${crypto.randomUUID()}-${arq.name.replace(/[^\w.-]+/g, '_')}`
-    const up = await supabase.storage.from('anexos').upload(caminho, arq, { contentType: arq.type || 'application/octet-stream' })
-    if (up.error) { setEnviando(false); return toast.error(up.error.message) }
-    const r = await supabase.from('titulo_anexos').insert({ organizacao_id: titulo.organizacao_id, titulo_id: titulo.id, storage_path: caminho, nome: arq.name, mime: arq.type, tamanho: arq.size })
-    setEnviando(false)
-    if (r.error) { await supabase.storage.from('anexos').remove([caminho]); return toast.error(r.error.message) }
-    qc.invalidateQueries({ queryKey: ['anexos', titulo.id] })
+    for (const arq of arquivos) { try { await enviarAnexo(titulo, arq, tipo) } catch (e) { toast.error((e as Error).message) } }
+    setEnviando(false); invalidar()
   }
   const abrir = async (a: any) => {
     const { data: u, error } = await supabase.storage.from('anexos').createSignedUrl(a.storage_path, 120)
@@ -376,26 +444,32 @@ export function AnexosDialog({ titulo, onFechar }: { titulo: Titulo; onFechar: (
   const remover = async (a: any) => {
     await supabase.storage.from('anexos').remove([a.storage_path])
     const r = await supabase.from('titulo_anexos').delete().eq('id', a.id)
-    if (r.error) toast.error(r.error.message); qc.invalidateQueries({ queryKey: ['anexos', titulo.id] })
+    if (r.error) toast.error(r.error.message); invalidar()
   }
   return (
     <Dialog open onOpenChange={o => !o && onFechar()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Anexos</DialogTitle><DialogDescription>{titulo.descricao} — boletos, notas fiscais e comprovantes.</DialogDescription></DialogHeader>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader><DialogTitle>Anexos</DialogTitle><DialogDescription>{titulo.descricao} — boleto, comprovante de pagamento e nota fiscal.</DialogDescription></DialogHeader>
         <ul className="divide-y rounded-lg border text-sm">
           {q.data?.map(a => (
             <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2">
-              <button className="truncate text-left text-primary hover:underline" onClick={() => abrir(a)}>{a.nome}</button>
-              {podeEscrever && <Button size="icon-sm" variant="ghost" onClick={() => remover(a)} aria-label="Remover"><Trash2 /></Button>}
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">{rotuloAnexo(a.tipo)}</span>
+                <button className="truncate text-left text-primary hover:underline" onClick={() => abrir(a)} title="Abrir">{a.nome}</button>
+              </span>
+              {podeEscrever && <Button size="icon-sm" variant="ghost" onClick={() => remover(a)} aria-label={`Remover ${a.nome}`}><Trash2 /></Button>}
             </li>
           ))}
           {!q.data?.length && <li className="px-3 py-4 text-center text-muted-foreground">Nenhum anexo.</li>}
         </ul>
         {podeEscrever && (
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-sm hover:bg-muted/40">
-            {enviando ? <Spinner /> : <Paperclip className="size-4" />}Adicionar arquivo (PDF, imagem, XML)
-            <input type="file" className="sr-only" accept=".pdf,.png,.jpg,.jpeg,.webp,.xml" onChange={e => e.target.files?.[0] && enviar(e.target.files[0])} />
-          </label>
+          <div className="space-y-2">
+            <Seletor aria-label="Tipo do anexo" value={tipo} onChange={e => setTipo(e.target.value)} opcoes={TIPOS_ANEXO} />
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-sm hover:bg-muted/40">
+              {enviando ? <Spinner /> : <Paperclip className="size-4" />}Adicionar {rotuloAnexo(tipo).toLowerCase()} (PDF, imagem ou XML)
+              <input type="file" multiple className="sr-only" accept={ACEITOS} onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) enviar(f) }} />
+            </label>
+          </div>
         )}
         <DialogFooter><Button variant="outline" onClick={onFechar}>Fechar</Button></DialogFooter>
       </DialogContent>
