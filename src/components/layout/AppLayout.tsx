@@ -13,7 +13,7 @@ import { useTheme } from '@/contexts/theme'
 import { supabase, rpc, unwrap } from '@/lib/supabase'
 import { dataHora } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Seletor } from '@/components/form'
 import { PeriodoSeletor } from './PeriodoSeletor'
 
@@ -160,7 +160,8 @@ function Usuario() {
         <span className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase">{user?.email?.[0]}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate text-xs">{user?.email}</DropdownMenuLabel>
+        {/* Base UI exige o rótulo dentro de um grupo */}
+        <DropdownMenuGroup><DropdownMenuLabel className="truncate text-xs">{user?.email}</DropdownMenuLabel></DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate('/onboarding?nova=1')}>Criar outra organização</DropdownMenuItem>
         <DropdownMenuItem onClick={async () => { await sair(); navigate('/login') }}><LogOut />Sair</DropdownMenuItem>

@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/contexts/theme'
 import { AuthProvider } from '@/contexts/auth'
 import { OrgProvider } from '@/contexts/org'
 import { Toaster } from '@/components/ui/sonner'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } } })
 
@@ -16,7 +17,7 @@ createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <OrgProvider>
-            <App />
+            <ErrorBoundary><App /></ErrorBoundary>
             <Toaster richColors position="top-right" />
           </OrgProvider>
         </AuthProvider>
