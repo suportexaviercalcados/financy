@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Check, CheckCheck, Paperclip, Pencil, Plus, Sparkles, Trash2, Wallet, X } from 'lucide-react'
+import { Ban, Check, CheckCheck, FileUp, Paperclip, Pencil, Plus, Sparkles, Trash2, Wallet, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase, rpc, unwrap, edge } from '@/lib/supabase'
 import { useOrg, useEmpresaPadrao } from '@/contexts/org'
@@ -15,6 +15,7 @@ import { DataTable, type Coluna } from '@/components/DataTable'
 import { Campo, EntradaValor, Grade, Seletor } from '@/components/form'
 import { Confirmar, Erro, PageHeader, Spinner, Status } from '@/components/common'
 import { traduzirErro } from '@/components/CrudPage'
+import { ImportarContas } from '@/components/ImportarContas'
 
 export interface Titulo {
   id: string; organizacao_id: string; empresa_id: string; tipo: 'pagar' | 'receber'; descricao: string; contato_id: string | null
@@ -48,6 +49,7 @@ export default function Contas() {
   const [cancelar, setCancelar] = useState<Titulo | null>(null)
   const [excluir, setExcluir] = useState<Titulo | null>(null)
   const [lote, setLote] = useState(false)
+  const [importar, setImportar] = useState(false)
 
   const q = useQuery({
     queryKey: ['titulos', org?.id, tipo, filtroStatus, filtroCat, filtroContato, usarPeriodo, periodo, empresaIds],
@@ -140,7 +142,10 @@ export default function Contas() {
   return (
     <div>
       <PageHeader titulo={titulo} descricao={tipo === 'pagar' ? 'Fornecedores, despesas fixas e variáveis, impostos e parcelas.' : 'Recebíveis de vendas, cartões, boletos e outras entradas.'}
-        acoes={podeEscrever && <Button onClick={() => setForm({ tipo })}><Plus />Nova conta a {tipo}</Button>} />
+        acoes={podeEscrever && <>
+          <Button variant="outline" onClick={() => setImportar(true)}><FileUp />Importar planilha</Button>
+          <Button onClick={() => setForm({ tipo })}><Plus />Nova conta a {tipo}</Button>
+        </>} />
       <DataTable colunas={colunas} linhas={linhas} carregando={q.isLoading} selecao={podeEscrever ? sel : undefined} onSelecao={setSel}
         exportar={{ nome: `contas-a-${tipo}`, titulo, subtitulo: `Vencimentos de ${data(periodo.inicio)} a ${data(periodo.fim)}` }}
         acoesSelecao={<>
@@ -159,6 +164,7 @@ export default function Contas() {
         vazio={<div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">Nenhuma conta encontrada com esses filtros.</div>}
       />
       {form && <TituloForm inicial={form} onFechar={() => setForm(null)} />}
+      {importar && <ImportarContas tipo={tipo} onFechar={() => setImportar(false)} />}
       {baixa && <BaixaDialog titulo={baixa} onFechar={() => setBaixa(null)} />}
       {anexos && <AnexosDialog titulo={anexos} onFechar={() => setAnexos(null)} />}
       {lote && <BaixaLoteDialog titulos={linhas.filter(t => sel.has(t.id) && ['aberto', 'parcial'].includes(t.status))} contas={contas.data ?? []}
