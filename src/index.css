@@ -137,3 +137,9 @@
 @layer base {
   .tabular { font-variant-numeric: tabular-nums; }
 }
+
+/* Corrida de vendedores: corredor "pulando" na pista */
+@keyframes corrida {
+  from { transform: translateY(1px); }
+  to { transform: translateY(-2px); }
+}

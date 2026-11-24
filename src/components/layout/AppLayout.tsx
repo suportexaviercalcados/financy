@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeftRight, Banknote, Bell, BookOpen, Bot, Building2, CalendarClock, ChartColumn, ChevronsLeft, ChevronsRight, CircleDollarSign,
   ClipboardList, CreditCard, FileBarChart, Gauge, HandCoins, Landmark, LayoutDashboard, Link2, LogOut, Menu, Monitor,
-  Moon, Package, PiggyBank, Receipt, Repeat, ScrollText, Settings, Shield, ShoppingBag, Store, Sun, Tags, Target, Users, Wallet, Waypoints, X,
+  Moon, Package, PiggyBank, Receipt, Repeat, ScrollText, Settings, Shield, ShoppingBag, Store, Sun, Tags, Target, Trophy, UserPlus, Users, Wallet, Waypoints, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOrg } from '@/contexts/org'
@@ -36,6 +36,7 @@ const MENU: { secao: string; itens: Item[] }[] = [
   ] },
   { secao: 'Planejamento', itens: [
     { to: '/metas', rotulo: 'Metas e orçamento', icone: Target },
+    { to: '/vendedores', rotulo: 'Metas de vendedores', icone: Trophy },
     { to: '/emprestimos', rotulo: 'Empréstimos', icone: Landmark },
   ] },
   { secao: 'Inteligência', itens: [{ to: '/ia', rotulo: 'Assistente IA', icone: Bot }] },
@@ -54,6 +55,7 @@ const MENU: { secao: string; itens: Item[] }[] = [
   { secao: 'Configurações', itens: [
     { to: '/config/organizacao', rotulo: 'Organização e plano', icone: Settings },
     { to: '/config/usuarios', rotulo: 'Usuários', icone: Users, admin: true },
+    { to: '/config/vendedores', rotulo: 'Vendedores', icone: UserPlus, admin: true },
     { to: '/config/integracoes', rotulo: 'Integração Bling', icone: Link2 },
     { to: '/config/regras', rotulo: 'Regras de conciliação', icone: ClipboardList },
     { to: '/config/ia', rotulo: 'Configuração da IA', icone: Bot, admin: true },
@@ -62,16 +64,18 @@ const MENU: { secao: string; itens: Item[] }[] = [
     { to: '/config/auditoria', rotulo: 'Auditoria e logs', icone: ScrollText, admin: true },
   ] },
 ]
+// papel vendedor: só a área de metas
+const MENU_VENDEDOR: typeof MENU = [{ secao: 'Vendas', itens: [{ to: '/vendedores', rotulo: 'Minhas metas', icone: Trophy }] }]
 
 export function AppLayout() {
-  const { org, orgs, trocarOrg, empresas, empresaId, setEmpresaId, podeAdministrar, ehAdminPlataforma } = useOrg()
+  const { org, orgs, trocarOrg, empresas, empresaId, setEmpresaId, podeAdministrar, ehAdminPlataforma, ehVendedor } = useOrg()
   const [recolhido, setRecolhido] = useState(() => { try { return localStorage.getItem('financy.menu') === '1' } catch { return false } })
   const [mobile, setMobile] = useState(false)
   const alternar = () => { setRecolhido(r => { try { localStorage.setItem('financy.menu', r ? '0' : '1') } catch { /* */ } return !r }) }
 
   const nav = (
     <nav className="flex flex-col gap-4 px-2 py-3" aria-label="Menu principal">
-      {MENU.map(s => (
+      {(ehVendedor ? MENU_VENDEDOR : MENU).map(s => (
         <div key={s.secao}>
           {!recolhido && <p className="mb-1 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{s.secao}</p>}
           <ul className="space-y-0.5">
@@ -120,11 +124,14 @@ export function AppLayout() {
             <Seletor aria-label="Organização" className="w-auto max-w-48" value={org?.id ?? ''} onChange={e => trocarOrg(e.target.value)}
               opcoes={orgs.map(o => ({ value: o.id, label: o.nome }))} />
           )}
-          <Seletor aria-label="Empresa" className="w-auto max-w-56" value={empresaId ?? ''} onChange={e => setEmpresaId(e.target.value || null)}
-            opcoes={empresas.map(e => ({ value: e.id, label: e.nome_fantasia || e.razao_social }))} vazio={empresas.length > 1 ? 'Consolidado (todas)' : undefined} />
-          <PeriodoSeletor />
+          {!ehVendedor && <>
+            <Seletor aria-label="Empresa" className="w-auto max-w-56" value={empresaId ?? ''} onChange={e => setEmpresaId(e.target.value || null)}
+              opcoes={empresas.map(e => ({ value: e.id, label: e.nome_fantasia || e.razao_social }))} vazio={empresas.length > 1 ? 'Consolidado (todas)' : undefined} />
+            <PeriodoSeletor />
+          </>}
+          {ehVendedor && <span className="truncate text-sm font-medium">{org?.nome}</span>}
           <div className="ml-auto flex items-center gap-1">
-            <Alertas />
+            {!ehVendedor && <Alertas />}
             <TemaBotao />
             <Usuario />
           </div>
@@ -153,6 +160,7 @@ function TemaBotao() {
 
 function Usuario() {
   const { user, sair } = useAuth()
+  const { ehVendedor } = useOrg()
   const navigate = useNavigate()
   return (
     <DropdownMenu>
@@ -163,7 +171,7 @@ function Usuario() {
         {/* Base UI exige o rótulo dentro de um grupo */}
         <DropdownMenuGroup><DropdownMenuLabel className="truncate text-xs">{user?.email}</DropdownMenuLabel></DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate('/onboarding?nova=1')}>Criar outra organização</DropdownMenuItem>
+        {!ehVendedor && <DropdownMenuItem onClick={() => navigate('/onboarding?nova=1')}>Criar outra organização</DropdownMenuItem>}
         <DropdownMenuItem onClick={async () => { await sair(); navigate('/login') }}><LogOut />Sair</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

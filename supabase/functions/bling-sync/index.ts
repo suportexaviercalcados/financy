@@ -92,11 +92,52 @@ async function syncCadastros(c: Contexto) {
       external_id: String(l.id), external_nome: l.descricao, interno_id: interno, updated_at: new Date().toISOString() },
       { onConflict: 'integracao_id,tipo,external_id' })
   }
+  // Vendedores (vínculo com o usuário vendedor do Financy é manual, em Configurações > Vendedores)
+  try { await mapearVendedores(c) } catch (e) { await c.logar('aviso', `Vendedores do Bling não lidos: ${(e as Error).message}`) }
   // Categorias financeiras (mapeamento manual pelo usuário; sem vínculo usa categoria padrão)
   for await (const { itens } of c.api.paginas<any>('/categorias/receitas-despesas', { tipo: 0 })) {
     const linhas = itens.map((k: any) => ({ organizacao_id: c.org, integracao_id: c.integ.id, tipo: 'categoria',
       external_id: String(k.id), external_nome: `${k.descricao} (${k.tipo === 1 ? 'despesa' : k.tipo === 2 ? 'receita' : 'receita/despesa'})` }))
     if (linhas.length) await c.svc.from('integracao_mapeamentos').upsert(linhas, { onConflict: 'integracao_id,tipo,external_id', ignoreDuplicates: true })
+  }
+}
+
+/** Cadastra/atualiza o mapeamento dos vendedores do Bling (sem apagar o usuário já vinculado). Retorna os ids externos. */
+async function mapearVendedores(c: Contexto): Promise<string[]> {
+  const ids: string[] = []
+  for await (const { itens } of c.api.paginas<any>('/vendedores', { situacaoContato: 'T' })) {
+    const linhas = itens.filter(v => v?.id).map(v => ({ organizacao_id: c.org, integracao_id: c.integ.id, tipo: 'vendedor',
+      external_id: String(v.id), external_nome: (v.contato?.nome || `Vendedor ${v.id}`).slice(0, 120), updated_at: new Date().toISOString() }))
+    if (linhas.length) {
+      const { error } = await c.svc.from('integracao_mapeamentos').upsert(linhas, { onConflict: 'integracao_id,tipo,external_id', defaultToNull: false })
+      if (error) throw error
+    }
+    ids.push(...linhas.map(l => l.external_id))
+  }
+  return ids
+}
+
+/** Preenche vendas.vendedor_externo das vendas já importadas (a listagem de pedidos não traz o vendedor; filtra por idVendedor). */
+async function syncVendedores(c: Contexto) {
+  const vendedores = c.job.cursor.vendedores ?? await mapearVendedores(c)
+  const lista = janelas(c.job.parametros.data_inicial ?? c.integ.sync_inicio ?? somaDias(hojeSP(), -365), c.job.parametros.data_final ?? hojeSP())
+  for (let i = c.job.cursor.i ?? 0; i < vendedores.length; i++) {
+    const iniJanela = i === (c.job.cursor.i ?? 0) ? lista.findIndex(([a]) => a === c.job.cursor.janela) : -1
+    for (const [idx, [a, b]] of lista.entries()) {
+      if (iniJanela > idx) continue
+      const pagIni = iniJanela === idx ? (c.job.cursor.pagina ?? 1) : 1
+      for await (const { pagina, itens } of c.api.paginas<any>('/pedidos/vendas', { idVendedor: vendedores[i], dataInicial: a, dataFinal: b }, pagIni)) {
+        const ids = itens.map(p => String(p.id))
+        if (ids.length) {
+          const { data, error } = await c.svc.from('vendas').update({ vendedor_externo: vendedores[i] }).eq('organizacao_id', c.org)
+            .eq('empresa_id', c.integ.empresa_id).eq('origem', 'bling').in('external_id', ids).is('vendedor_externo', null).select('id')
+          if (error) throw error
+          c.importados += data?.length ?? 0
+        }
+        await c.salvarCursor({ vendedores, i, janela: a, pagina: pagina + 1 })
+        if (c.semTempo()) throw new Pausa()
+      }
+    }
   }
 }
 
@@ -210,7 +251,8 @@ async function importarPedido(c: Contexto, resumo: any, cache: { formas: Map<str
     observacoes: d.numeroLoja ? `Pedido loja ${d.numeroLoja}` : null, itens, pagamentos,
   } })
   if (error) { await c.logar('erro', `Pedido ${d.numero}: ${error.message}`, { pedido: externo }); return false }
-  await c.svc.from('vendas').update({ situacao_externa: Number(d.situacao?.valor ?? situacao) })
+  const vendedor = Number(d.vendedor?.id) > 0 ? String(d.vendedor.id) : null
+  await c.svc.from('vendas').update({ situacao_externa: Number(d.situacao?.valor ?? situacao), vendedor_externo: vendedor })
     .eq('organizacao_id', c.org).eq('origem', 'bling').eq('external_id', externo)
   return true
 }
@@ -381,6 +423,7 @@ async function processar(svc: SupabaseClient, job: Job, prazo: number) {
       case 'contatos': await syncContatos(c); break
       case 'vendas': await syncVendas(c); break
       case 'venda_unica': await syncVendaUnica(c); break
+      case 'vendedores': await syncVendedores(c); break
       case 'contas_pagar': await syncContas(c, 'pagar'); break
       case 'contas_receber': await syncContas(c, 'receber'); break
     }

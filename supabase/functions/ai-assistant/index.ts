@@ -131,7 +131,8 @@ Deno.serve(async (req) => {
   const auth = await usuarioAutenticado(req)
   if (!auth) return json({ erro: 'Não autenticado' }, 401)
   const org = body.organizacao_id as string
-  const { data: membro } = await auth.client.from('organizacoes').select('id').eq('id', org).maybeSingle()
+  // fn_can_read exclui o papel vendedor (que só acessa a área de metas)
+  const { data: membro } = await auth.client.rpc('fn_can_read', { org })
   if (!membro) return json({ erro: 'Sem acesso a esta organização' }, 403)
   // Ações que gravam (sugestões / aplicação automática) exigem papel com escrita: visualizador só consulta
   if (['categorizar', 'conciliar', 'alertas'].includes(acao)) {

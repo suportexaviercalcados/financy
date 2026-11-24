@@ -440,3 +440,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.enviar-convite]
 verify_jwt = false
+[functions.criar-vendedor]
+verify_jwt = false

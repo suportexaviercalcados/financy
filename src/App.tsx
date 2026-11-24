@@ -25,6 +25,7 @@ const Admin = lazy(() => import('@/pages/Admin'))
 const Cad = lazy(() => import('@/pages/cadastros'))
 const Cfg = lazy(() => import('@/pages/config'))
 const AjudaBling = lazy(() => import('@/pages/AjudaBling'))
+const Vendedores = lazy(() => import('@/pages/Vendedores'))
 
 function Protegido({ children }: { children: ReactNode }) {
   const { user, carregando } = useAuth()
@@ -33,6 +34,8 @@ function Protegido({ children }: { children: ReactNode }) {
   if (carregando || (user && cOrg)) return <div className="p-8"><Carregando /></div>
   if (!user) return <Navigate to={`/login?voltar=${encodeURIComponent(loc.pathname)}`} replace />
   if (!orgs.length || (org && !org.onboarding_concluido && org.papel === 'proprietario')) return <Navigate to="/onboarding" replace />
+  // vendedor só acessa a área de metas (o banco também bloqueia os dados financeiros via RLS)
+  if (org?.papel === 'vendedor' && loc.pathname !== '/vendedores') return <Navigate to="/vendedores" replace />
   return <>{children}</>
 }
 
@@ -74,6 +77,7 @@ export default function App() {
             <Route path="dre" element={<DRE />} />
             <Route path="dfc" element={<DFC />} />
             <Route path="metas" element={<Metas />} />
+            <Route path="vendedores" element={<Vendedores />} />
             <Route path="emprestimos" element={<Emprestimos />} />
             <Route path="ia" element={<IA />} />
             <Route path="cadastros/:pagina" element={<Cad />} />

@@ -5,7 +5,7 @@ import { supabase, unwrap } from '@/lib/supabase'
 import { useAuth } from './auth'
 import { fimMes, hoje, inicioMes } from '@/lib/format'
 
-export type Papel = 'proprietario' | 'administrador' | 'financeiro' | 'visualizador'
+export type Papel = 'proprietario' | 'administrador' | 'financeiro' | 'visualizador' | 'vendedor'
 export interface Organizacao { id: string; nome: string; plano_id: string; onboarding_concluido: boolean; rateio_modo: string; papel: Papel }
 export interface Empresa { id: string; razao_social: string; nome_fantasia: string | null; cnpj: string | null; regime_tributario: string;
   aliquota_imposto_vendas: number; imposto_vendas_modo: string; ativo: boolean }
@@ -19,6 +19,8 @@ interface Valor {
   empresaIds: string[] | null
   periodo: Periodo; setPeriodo: (p: Periodo) => void
   podeEscrever: boolean; podeAdministrar: boolean; ehProprietario: boolean; ehAdminPlataforma: boolean
+  /** papel restrito: só acessa a área de metas (/vendedores) */
+  ehVendedor: boolean
   recarregar: () => void
 }
 
@@ -67,7 +69,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setEmpresaId: (id) => { setEmpresaIdState(id); gravarLS('financy.empresa', id) },
     empresaIds: empresaValida ? [empresaValida] : null,
     periodo, setPeriodo: (p) => { setPeriodoState(p); gravarLS('financy.periodo', p) },
-    podeEscrever: !!org && org.papel !== 'visualizador',
+    podeEscrever: !!org && !['visualizador', 'vendedor'].includes(org.papel),
+    ehVendedor: org?.papel === 'vendedor',
     podeAdministrar: !!org && ['proprietario', 'administrador'].includes(org.papel),
     ehProprietario: org?.papel === 'proprietario',
     ehAdminPlataforma: !!adminQ.data,

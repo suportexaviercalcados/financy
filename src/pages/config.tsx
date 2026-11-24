@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
+import { CadastroVendedores } from './Vendedores'
 
 // situacao.valor dos pedidos de venda no Bling (Cancelado e Em digitação nunca são importados)
 const SITUACOES_PEDIDO: [number, string][] = [[1, 'Atendido'], [11, 'Verificado'], [8, 'Pagamento confirmado'], [6, 'Atendido parcialmente'],
@@ -30,6 +31,7 @@ const PAPEIS: { value: Papel; label: string; desc: string }[] = [
   { value: 'administrador', label: 'Administrador', desc: 'Operações e configurações, exceto assinatura.' },
   { value: 'financeiro', label: 'Financeiro', desc: 'Lançamentos, contas, conciliação, relatórios e importações.' },
   { value: 'visualizador', label: 'Visualizador', desc: 'Somente leitura de dashboards e relatórios.' },
+  { value: 'vendedor', label: 'Vendedor', desc: 'Só a área de metas: a própria meta e a corrida. Sem acesso financeiro.' },
 ]
 
 export default function Config() {
@@ -37,6 +39,7 @@ export default function Config() {
   switch (pagina) {
     case 'organizacao': return <Organizacao />
     case 'usuarios': return <Usuarios />
+    case 'vendedores': return <CadastroVendedores />
     case 'integracoes': return <Integracoes />
     case 'regras': return <Regras />
     case 'ia': return <ConfigIA />
