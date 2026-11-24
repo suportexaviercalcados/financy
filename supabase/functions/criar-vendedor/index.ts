@@ -2,6 +2,9 @@
 // Quem chama precisa ser proprietário/administrador da organização (fn_can_admin com o JWT do chamador).
 import { corsHeaders, json, log, serviceClient, usuarioAutenticado } from '../_shared/util.ts'
 
+const TENTATIVAS_HORA = 20
+const ERRO_CRIAR = 'Não foi possível criar o login com este e-mail e senha. Use outro e-mail ou uma senha mais forte.'
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ erro: 'Método não suportado' }, 405)
@@ -21,11 +24,20 @@ Deno.serve(async (req) => {
   if (eAdm || !ehAdmin) return json({ erro: 'Somente proprietário ou administrador pode cadastrar vendedores.' }, 403)
 
   const svc = serviceClient()
+  // Limite por quem chama (em todas as organizações): impede usar a função para descobrir e-mails cadastrados.
+  // ponytail: contagem no audit_log; trocar por limitador dedicado se o volume crescer.
+  const desde = new Date(Date.now() - 3600_000).toISOString()
+  const { count } = await svc.from('audit_log').select('id', { count: 'exact', head: true })
+    .eq('user_id', auth.user.id).eq('acao', 'criar_vendedor_tentativa').gte('created_at', desde)
+  if ((count ?? 0) >= TENTATIVAS_HORA) return json({ erro: 'Muitas tentativas. Tente de novo em uma hora.' }, 429)
+  await svc.from('audit_log').insert({ organizacao_id: org, user_id: auth.user.id, tabela: 'membros', acao: 'criar_vendedor_tentativa',
+    depois: { email } })
+
   const { data: criado, error } = await svc.auth.admin.createUser({ email, password: senha, email_confirm: true, user_metadata: { nome } })
   if (error || !criado.user) {
-    if (/already|registered|exists/i.test(error?.message ?? '')) return json({ erro: 'Já existe um usuário com este e-mail.' }, 409)
-    log('erro', 'criar vendedor', { erro: error?.message })
-    return json({ erro: error?.message ?? 'Falha ao criar usuário' }, 400)
+    // Mesma resposta para e-mail já cadastrado e senha recusada: não revela quais e-mails têm conta
+    log('aviso', 'criar vendedor', { erro: error?.message })
+    return json({ erro: ERRO_CRIAR }, 400)
   }
   const uid = criado.user.id
   const { error: eMem } = await svc.from('membros').insert({ organizacao_id: org, user_id: uid, papel: 'vendedor' })

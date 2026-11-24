@@ -130,5 +130,11 @@ describe('Papel vendedor e metas', () => {
     const m = ok(await c.from('membros').select('papel').eq('organizacao_id', o.orgId)) as any[]
     expect(m).toEqual([{ papel: 'vendedor' }])
     expect(ok(await c.from('vendas').select('id').eq('organizacao_id', o.orgId))).toEqual([])
+    // e-mail já cadastrado e senha recusada recebem a mesma resposta (não revela quem tem conta)
+    const msg = async (corpo: object) => { const r = await chamar(o.client, corpo); return (await (r.error as any)?.context?.json())?.erro }
+    const existente = await msg({ organizacao_id: o.orgId, nome: 'Carla 2', email, senha: 'Outra-12345' })
+    const fraca = await msg({ organizacao_id: o.orgId, nome: 'Davi', email: `davi-${Date.now()}@teste.financy.local`, senha: '12345678' })
+    expect(existente).toMatch(/Não foi possível criar o login/)
+    expect(fraca === undefined || fraca === existente).toBe(true)   // senha fraca só falha se o Auth local exigir força
   })
 })
