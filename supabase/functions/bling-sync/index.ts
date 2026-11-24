@@ -290,6 +290,14 @@ async function syncContas(c: Contexto, tipo: 'pagar' | 'receber') {
   }
 }
 
+type RegraConta = { contem: string; acao: 'ignorar' | 'categoria'; categoria_id?: string }
+const semAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+/** Primeira regra cujo texto aparece na descrição/documento da conta (sem acento e sem caixa) */
+export function regraDescricao(regras: RegraConta[] | undefined, texto: string): RegraConta | undefined {
+  const t = semAcento(texto)
+  return (regras ?? []).find(r => r.contem && t.includes(semAcento(r.contem)))
+}
+
 async function importarConta(c: Contexto, tipo: 'pagar' | 'receber', resumo: any,
   o: { mapaCat: Map<string, string | null>; catPadrao: string; contaBaixa: string | null; importarVendas: boolean }) {
   const externo = `${tipo === 'pagar' ? 'CP' : 'CR'}-${resumo.id}`
@@ -308,7 +316,18 @@ async function importarConta(c: Contexto, tipo: 'pagar' | 'receber', resumo: any
   if (tipo === 'receber' && o.importarVendas && String(d.origem?.tipoOrigem ?? '').toLowerCase() === 'venda') return false
   const valor = r2(Number(d.valor))
   if (!(valor > 0)) return false
-  const categoria = o.mapaCat.get(String(d.categoria?.id ?? '')) ?? o.catPadrao
+  // Regras por descrição (integracoes.config.regras_contas): 'ignorar' tem prioridade sobre tudo; 'categoria' só vale sem mapeamento.
+  // 'ignorar': a conta é controlada por outro cadastro (ex.: contrato no módulo Empréstimos) e não é importada.
+  const historico = String(d.historico ?? '')
+  const regra = regraDescricao(c.integ.config?.regras_contas, `${historico} ${d.numeroDocumento ?? ''}`)
+  if (regra?.acao === 'ignorar') {
+    if (existente && existente.status !== 'cancelado' && Number(existente.valor_pago) === 0) {
+      await c.svc.from('titulos').update({ status: 'cancelado' }).eq('id', existente.id)
+    }
+    return false
+  }
+  // categoria mapeada do Bling vence; a regra só preenche contas sem categoria mapeada
+  const categoria = o.mapaCat.get(String(d.categoria?.id ?? '')) || (regra?.acao === 'categoria' && regra.categoria_id) || o.catPadrao
   const comp = d.competencia || d.dataEmissao || d.vencimento
   const campos = {
     descricao: (d.historico || `${tipo === 'pagar' ? 'Conta a pagar' : 'Conta a receber'} Bling ${d.numeroDocumento ?? resumo.id}`).slice(0, 300),
