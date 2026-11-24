@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeftRight, Banknote, Bell, BookOpen, Bot, Building2, CalendarClock, ChartColumn, ChevronsLeft, ChevronsRight, CircleDollarSign,
@@ -69,6 +69,9 @@ const MENU_VENDEDOR: typeof MENU = [{ secao: 'Vendas', itens: [{ to: '/vendedore
 
 export function AppLayout() {
   const { org, orgs, trocarOrg, empresas, empresaId, setEmpresaId, podeAdministrar, ehAdminPlataforma, ehVendedor } = useOrg()
+  // telas de metas de vendedores não usam os filtros de empresa/período
+  const { pathname } = useLocation()
+  const semFiltros = ehVendedor || ['/vendedores', '/config/vendedores'].includes(pathname)
   const [recolhido, setRecolhido] = useState(() => { try { return localStorage.getItem('financy.menu') === '1' } catch { return false } })
   const [mobile, setMobile] = useState(false)
   const alternar = () => { setRecolhido(r => { try { localStorage.setItem('financy.menu', r ? '0' : '1') } catch { /* */ } return !r }) }
@@ -119,12 +122,12 @@ export function AppLayout() {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex flex-wrap items-center gap-2 border-b bg-background/90 px-4 py-2 backdrop-blur md:px-6">
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobile(true)} aria-label="Abrir menu"><Menu /></Button>
+          {!ehVendedor && <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobile(true)} aria-label="Abrir menu"><Menu /></Button>}
           {orgs.length > 1 && (
             <Seletor aria-label="Organização" className="w-auto max-w-48" value={org?.id ?? ''} onChange={e => trocarOrg(e.target.value)}
               opcoes={orgs.map(o => ({ value: o.id, label: o.nome }))} />
           )}
-          {!ehVendedor && <>
+          {!semFiltros && <>
             <Seletor aria-label="Empresa" className="w-auto max-w-56" value={empresaId ?? ''} onChange={e => setEmpresaId(e.target.value || null)}
               opcoes={empresas.map(e => ({ value: e.id, label: e.nome_fantasia || e.razao_social }))} vazio={empresas.length > 1 ? 'Consolidado (todas)' : undefined} />
             <PeriodoSeletor />

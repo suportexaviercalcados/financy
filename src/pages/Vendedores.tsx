@@ -35,7 +35,7 @@ export default function Vendedores() {
   const eu = linhas.find(l => l.eu)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-sm:[&_button]:min-h-10 max-sm:[&_input]:h-10 max-sm:[&_select]:h-10">
       <PageHeader titulo={ehVendedor ? 'Minhas metas' : 'Metas de vendedores'}
         descricao={ehVendedor ? 'Seu andamento no mês e a corrida pelo megaprêmio.' : 'Meta mensal de cada vendedor, megaprêmio e corrida da equipe.'}
         acoes={<Campo rotulo="Mês" className="w-48"><Input type="month" value={mes.slice(0, 7)} onChange={e => e.target.value && setMes(e.target.value + '-01')} /></Campo>} />
@@ -114,10 +114,12 @@ function Pista({ linhas, pctMinimo, valores }: { linhas: Corredor[]; pctMinimo: 
             <div className="mb-1.5 flex items-center gap-2 text-sm">
               <span className={cn('w-7 text-center font-semibold tabular', ehLider ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>{i + 1}º</span>
               <span className="min-w-0 flex-1 truncate font-medium">{l.nome}{l.eu && <span className="ml-1 text-xs text-primary">(você)</span>}</span>
+              {elegivel && <Trophy className="size-4 shrink-0 text-emerald-600 sm:hidden dark:text-emerald-400" aria-label="No páreo do prêmio" />}
               {elegivel && <span className="hidden rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:inline dark:text-emerald-400">no páreo do prêmio</span>}
               {valores && l.vendido != null && <span className="hidden text-xs text-muted-foreground tabular md:inline">{brl(l.vendido)} / {brl(l.meta)}</span>}
               <span className="w-16 text-right font-semibold tabular">{pct(p)}</span>
             </div>
+            {valores && l.vendido != null && <p className="-mt-1 mb-1.5 pl-9 text-xs text-muted-foreground tabular md:hidden">{brl(l.vendido)} / {brl(l.meta)}</p>}
             <div className="relative h-10 rounded-lg bg-[repeating-linear-gradient(90deg,var(--muted)_0_24px,transparent_24px_48px)] ring-1 ring-border">
               <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-muted-foreground/30" />
               {/* linha de chegada (100%) */}
@@ -242,7 +244,7 @@ export function CadastroVendedores() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-sm:[&_button]:min-h-10 max-sm:[&_input]:h-10 max-sm:[&_select]:h-10">
       <PageHeader titulo="Vendedores" descricao="Login próprio para cada vendedor. O vendedor só acessa a área de metas: nada de financeiro, DRE ou contas." />
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><UserPlus className="size-4" />Novo vendedor</CardTitle></CardHeader>
