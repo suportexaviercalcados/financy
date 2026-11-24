@@ -238,7 +238,9 @@ async function syncVendas(c: Contexto) {
   const incremental = c.job.tipo !== 'inicial' && c.integ.ultima_sincronizacao
   const lista: { params: Record<string, string>; chave: string }[] = incremental
     ? [{ chave: 'alt', params: { dataAlteracaoInicial: dataHoraBling(c.integ.ultima_sincronizacao) } }]
-    : janelas(c.integ.sync_inicio ?? somaDias(hojeSP(), -365), hojeSP()).map(([a, b]) => ({ chave: a, params: { dataInicial: a, dataFinal: b } }))
+    // parametros.data_inicial/data_final reimportam só um intervalo (ex.: mês que estava fechado)
+    : janelas(c.job.parametros.data_inicial ?? c.integ.sync_inicio ?? somaDias(hojeSP(), -365), c.job.parametros.data_final ?? hojeSP())
+        .map(([a, b]) => ({ chave: a, params: { dataInicial: a, dataFinal: b } }))
   const iniJanela = lista.findIndex(j => j.chave === c.job.cursor.janela)
   for (const [idx, j] of lista.entries()) {
     if (iniJanela > idx) continue
