@@ -66,6 +66,16 @@ export class BlingApi {
       return this.token
     } catch (e) {
       if (e instanceof BlingErro && (e.status === 400 || e.status === 401)) {
+        // O refresh token do Bling é de uso único: se outra execução renovou ao mesmo tempo,
+        // o nosso falha mas o token novo já está (ou estará em instantes) gravado. Usa ele.
+        for (let i = 0; i < 3; i++) {
+          const { data: atual } = await this.svc.from('integracao_tokens').select('*').eq('integracao_id', this.integracaoId).single()
+          if (atual && atual.updated_at !== data.updated_at) {
+            this.token = await decrypt(atual.access_token_enc); this.expira = new Date(atual.expires_at).getTime()
+            return this.token
+          }
+          await sleep(1000)
+        }
         await this.svc.from('integracoes').update({ status: 'reautorizar', ultimo_erro: 'Refresh token inválido ou expirado. Reconecte a conta Bling.' }).eq('id', this.integracaoId)
       }
       throw e
