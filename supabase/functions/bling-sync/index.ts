@@ -2,7 +2,7 @@
 // Disparo: pg_cron (header x-cron-secret) a cada 10 min, ou usuário admin (POST { integracao_id }) para sincronizar agora.
 // Idempotência: vendas/títulos/produtos/contatos usam (organizacao_id, origem='bling', external_id) únicos.
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
-import { BlingApi, BlingErro, SITUACAO_PEDIDO_CANCELADO, SITUACOES_IMPORTAR_PADRAO, tipoFormaBling } from '../_shared/bling.ts'
+import { BlingApi, BlingErro, conciliarPedidos, SITUACAO_PEDIDO_CANCELADO, SITUACOES_IMPORTAR_PADRAO, tipoFormaBling } from '../_shared/bling.ts'
 import { corsHeaders, env, igualSeguro, json, log, serviceClient, usuarioAutenticado } from '../_shared/util.ts'
 
 const ORCAMENTO_MS = 100_000   // tempo máximo por execução (limite de wall-clock da Edge Function) antes de salvar cursor
@@ -292,6 +292,45 @@ async function syncVendas(c: Contexto) {
       await c.salvarCursor({ janela: j.chave, pagina: pagina + 1 })
       if (c.semTempo()) throw new Pausa()
     }
+  }
+  if (incremental) await conciliarVendas(c, cache)
+}
+
+/**
+ * Confere os pedidos recentes com o Bling: importa os atendidos que faltam aqui e cancela os cancelados ou excluídos lá.
+ * Cobre o que a busca por data de alteração perde: pedido excluído (some da listagem) e rodada que falhou no meio
+ * (ultima_sincronizacao é única para todos os recursos e avança quando outro recurso conclui).
+ */
+async function conciliarVendas(c: Contexto, cache: Awaited<ReturnType<typeof cacheVendas>>) {
+  const hoje = hojeSP()
+  const ini = somaDias(hoje, -7).slice(0, 8) + '01'   // mês atual; na primeira semana, também o mês anterior
+  const pedidos: any[] = []
+  for await (const { itens } of c.api.paginas<any>('/pedidos/vendas', { dataInicial: ini, dataFinal: hoje })) pedidos.push(...itens)
+  const locais: any[] = []
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await c.svc.from('vendas').select('id, numero, external_id, status, situacao_externa').eq('organizacao_id', c.org)
+      .eq('empresa_id', c.integ.empresa_id).eq('origem', 'bling').gte('data_venda', ini).lte('data_venda', hoje).order('id').range(de, de + 999)
+    if (error) throw new Error(error.message)
+    locais.push(...data)
+    if (data.length < 1000) break
+  }
+  const { revisar, sumidas } = conciliarPedidos(pedidos, locais, c.integ.config?.situacoes_importar ?? SITUACOES_IMPORTAR_PADRAO)
+  for (const p of revisar) {
+    if (await importarPedido(c, p, cache)) c.importados++
+    if (c.semTempo()) throw new Pausa()
+  }
+  for (const v of sumidas) {
+    // confirma no Bling antes de cancelar: o pedido pode só ter mudado de data (saiu do período listado)
+    const { data: d } = await c.api.get<{ data: any }>(`/pedidos/vendas/${v.external_id}`)
+    if (d) { if (await importarPedido(c, d, cache)) c.importados++ }
+    else {
+      await c.svc.from('vendas').update({ situacao_externa: SITUACAO_PEDIDO_CANCELADO }).eq('id', v.id)
+      const { error } = await c.svc.rpc('fn_cancelar_venda', { p_venda: v.id })
+      await c.logar('aviso', error ? `Pedido ${v.numero} excluído no Bling, mas não pôde ser cancelado aqui: ${error.message}`
+        : `Pedido ${v.numero} excluído no Bling: venda cancelada.`)
+      if (!error) c.importados++
+    }
+    if (c.semTempo()) throw new Pausa()
   }
 }
 

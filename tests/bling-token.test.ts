@@ -13,7 +13,7 @@ vi.mock('../supabase/functions/_shared/util.ts', () => ({
   decrypt: async (s: string) => s,
 }))
 
-const { BlingApi } = await import('../supabase/functions/_shared/bling.ts')
+const { BlingApi, conciliarPedidos } = await import('../supabase/functions/_shared/bling.ts')
 
 const antigo = { access_token_enc: 'velho', refresh_token_enc: 'r1', expires_at: '2000-01-01T00:00:00Z', updated_at: 't1' }
 
@@ -49,5 +49,20 @@ describe('BlingApi.accessToken', () => {
     const api = new BlingApi(svc, 'integ-1')
     await expect((api as any).accessToken()).rejects.toThrow('Falha no token Bling (400)')
     expect(updates).toEqual([expect.objectContaining({ status: 'reautorizar' })])
+  })
+})
+
+describe('conciliarPedidos', () => {
+  const ped = (id: number, valor: number) => ({ id, situacao: { valor } })
+  const loc = (external_id: string, status = 'concluida', situacao_externa: number | null = 1) => ({ external_id, status, situacao_externa })
+
+  it('revisa o que falta ou mudou de situação e aponta as vendas que sumiram do Bling', () => {
+    const pedidos = [ped(1, 1), ped(2, 2), ped(3, 1), ped(4, 2), ped(5, 0)]
+    const locais = [loc('1'), loc('2'), loc('9'), loc('8', 'cancelada'), loc('7', 'concluida', 2)]
+    const { revisar, sumidas } = conciliarPedidos(pedidos, locais, [1, 11])
+    // 2: cancelado lá e ativo aqui; 3: atendido lá e ausente aqui. Fora: 1 (igual), 4 (cancelado nunca importado), 5 (em aberto)
+    expect(revisar.map(p => p.id)).toEqual([2, 3])
+    // 9 sumiu; 8 já cancelada e 7 já marcada como cancelada no Bling não repetem
+    expect(sumidas.map(l => l.external_id)).toEqual(['9'])
   })
 })

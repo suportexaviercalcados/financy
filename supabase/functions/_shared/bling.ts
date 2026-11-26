@@ -142,3 +142,20 @@ export const SITUACOES_PEDIDO: Record<number, string> = { 0: 'Em aberto', 1: 'At
   5: 'Faturado parcialmente', 6: 'Atendido parcialmente', 7: 'Aguardando pagamento', 8: 'Pagamento confirmado',
   10: 'Em digitação', 11: 'Verificado', 12: 'Checkout parcial' }
 export const SITUACOES_IMPORTAR_PADRAO = [1, 11, 8, 3]   // Atendido, Verificado, Pagamento confirmado, Em andamento
+
+/**
+ * Compara a listagem de pedidos do Bling num período com as vendas locais do mesmo período.
+ * - revisar: pedidos que faltam aqui (em situação importável) ou cuja situação mudou (inclui os cancelados lá);
+ * - sumidas: vendas ativas aqui que não vieram na listagem (candidatas a pedido excluído no Bling).
+ */
+export function conciliarPedidos<P extends { id: string | number; situacao?: { valor?: number } }, L extends { external_id: string; status: string; situacao_externa: number | null }>(
+  pedidos: P[], locais: L[], permitidas: number[]): { revisar: P[]; sumidas: L[] } {
+  const loc = new Map(locais.map(l => [l.external_id, l]))
+  const revisar = pedidos.filter(p => {
+    const l = loc.get(String(p.id)); const s = Number(p.situacao?.valor)
+    return l ? l.situacao_externa !== s : permitidas.includes(s)
+  })
+  const ids = new Set(pedidos.map(p => String(p.id)))
+  const sumidas = locais.filter(l => l.status !== 'cancelada' && l.situacao_externa !== SITUACAO_PEDIDO_CANCELADO && !ids.has(l.external_id))
+  return { revisar, sumidas }
+}
