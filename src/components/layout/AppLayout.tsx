@@ -85,7 +85,7 @@ export function AppLayout() {
             {s.itens.filter(i => !i.admin || podeAdministrar).map(i => (
               <li key={i.to}>
                 <NavLink to={i.to} end={i.to === '/' || i.to === '/vendas'} onClick={() => setMobile(false)} title={recolhido ? i.rotulo : undefined}
-                  className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                  className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-sidebar-foreground/80 max-md:py-3 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
                     isActive && 'bg-sidebar-accent font-medium text-sidebar-foreground', recolhido && 'justify-center')}>
                   <i.icone className="size-4 shrink-0" />{!recolhido && <span className="truncate">{i.rotulo}</span>}
                 </NavLink>
@@ -95,7 +95,7 @@ export function AppLayout() {
         </div>
       ))}
       {ehAdminPlataforma && (
-        <NavLink to="/admin" className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-sidebar-accent', isActive && 'bg-sidebar-accent font-medium', recolhido && 'justify-center')}>
+        <NavLink to="/admin" className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-sidebar-accent max-md:py-3', isActive && 'bg-sidebar-accent font-medium', recolhido && 'justify-center')}>
           <Shield className="size-4" />{!recolhido && 'Painel da plataforma'}
         </NavLink>
       )}
@@ -121,14 +121,14 @@ export function AppLayout() {
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex flex-wrap items-center gap-2 border-b bg-background/90 px-4 py-2 backdrop-blur md:px-6">
-          {!ehVendedor && <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobile(true)} aria-label="Abrir menu"><Menu /></Button>}
+        <header className="sticky top-0 z-40 max-md:static flex flex-wrap items-center gap-2 border-b bg-background/90 px-4 py-2 backdrop-blur md:px-6">
+          {!ehVendedor && <Button variant="ghost" size="icon" className="max-md:size-10 md:hidden" onClick={() => setMobile(true)} aria-label="Abrir menu"><Menu /></Button>}
           {orgs.length > 1 && (
             <Seletor aria-label="Organização" className="w-auto max-w-48" value={org?.id ?? ''} onChange={e => trocarOrg(e.target.value)}
               opcoes={orgs.map(o => ({ value: o.id, label: o.nome }))} />
           )}
           {!semFiltros && <>
-            <Seletor aria-label="Empresa" className="w-auto max-w-56" value={empresaId ?? ''} onChange={e => setEmpresaId(e.target.value || null)}
+            <Seletor aria-label="Empresa" className="w-auto max-w-56 max-md:order-last" value={empresaId ?? ''} onChange={e => setEmpresaId(e.target.value || null)}
               opcoes={empresas.map(e => ({ value: e.id, label: e.nome_fantasia || e.razao_social }))} vazio={empresas.length > 1 ? 'Consolidado (todas)' : undefined} />
             <PeriodoSeletor />
           </>}
@@ -158,7 +158,7 @@ function TemaBotao() {
   const { theme, setTheme } = useTheme()
   const prox = { light: 'dark', dark: 'system', system: 'light' } as const
   const Icone = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor
-  return <Button variant="ghost" size="icon" onClick={() => setTheme(prox[theme])} aria-label={`Tema: ${theme === 'system' ? 'sistema' : theme === 'dark' ? 'escuro' : 'claro'}`}><Icone /></Button>
+  return <Button variant="ghost" size="icon" className="max-md:size-10" onClick={() => setTheme(prox[theme])} aria-label={`Tema: ${theme === 'system' ? 'sistema' : theme === 'dark' ? 'escuro' : 'claro'}`}><Icone /></Button>
 }
 
 function Usuario() {
@@ -167,7 +167,7 @@ function Usuario() {
   const navigate = useNavigate()
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Conta" />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="max-md:size-10" aria-label="Conta" />}>
         <span className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase">{user?.email?.[0]}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -201,7 +201,7 @@ function Alertas() {
   const cor = { critico: 'bg-red-500', aviso: 'bg-amber-500', info: 'bg-sky-500' } as Record<string, string>
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`Alertas (${n})`} className="relative" />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`Alertas (${n})`} className="relative max-md:size-10" />}>
         <Bell />{n > 0 && <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-white">{n > 9 ? '9+' : n}</span>}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-96 max-w-[calc(100vw-2rem)]">

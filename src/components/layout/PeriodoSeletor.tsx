@@ -22,15 +22,18 @@ export function PeriodoSeletor() {
   const { periodo, setPeriodo } = useOrg()
   const atual = Object.keys(PRESETS).find(k => { const p = PRESETS[k](); return p.inicio === periodo.inicio && p.fim === periodo.fim }) ?? 'custom'
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <Seletor aria-label="Período" className="w-auto" value={atual}
+    // no celular os filhos entram direto no cabeçalho (contents) e vão para depois dos botões
+    <div className="flex flex-wrap items-center gap-1.5 max-md:contents">
+      <Seletor aria-label="Período" className="w-auto max-md:order-last" value={atual}
         onChange={e => e.target.value !== 'custom' && setPeriodo(PRESETS[e.target.value]())}
         opcoes={Object.entries(ROTULOS).map(([value, label]) => ({ value, label }))} />
+      <span className="flex items-center gap-1.5 max-md:order-last">
       <Input type="date" aria-label="Data inicial" className="w-36" value={periodo.inicio}
         onChange={e => e.target.value && setPeriodo({ inicio: e.target.value, fim: e.target.value > periodo.fim ? e.target.value : periodo.fim })} />
       <span className="text-xs text-muted-foreground">até</span>
       <Input type="date" aria-label="Data final" className="w-36" value={periodo.fim}
         onChange={e => e.target.value && setPeriodo({ inicio: e.target.value < periodo.inicio ? e.target.value : periodo.inicio, fim: e.target.value })} />
+      </span>
     </div>
   )
 }

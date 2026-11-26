@@ -43,7 +43,7 @@ export default function Vendedores() {
       {eu && eu.meta != null && <MeuAndamento meta={Number(eu.meta)} vendido={Number(eu.vendido)} mes={mes} />}
       {ehVendedor && !corrida.isLoading && !eu && <Aviso>Você ainda não tem meta para {mesAno(mes)}. Fale com o administrador.</Aviso>}
       <PremioCard premio={premio.data} mes={mes} />
-      <Card>
+      <Card className="max-sm:[--card-spacing:--spacing(3)]">
         <CardHeader><CardTitle className="flex items-center gap-2"><Flag className="size-4" />Corrida do mês</CardTitle></CardHeader>
         <CardContent>
           {corrida.isLoading ? <Carregando linhas={3} /> : !linhas.length
@@ -65,7 +65,7 @@ function MeuAndamento({ meta, vendido, mes }: { meta: number; vendido: number; m
       <Kpi titulo="% da meta" valor={pct(a.pct)} rodape={a.falta > 0 ? `Faltam ${brl(a.falta)}` : 'Meta batida! 🎉'} />
       <Kpi titulo="Ritmo por dia" valor={brl(a.ritmoAtual)} alerta={a.falta > 0 && a.diasRestantes > 0 && !noRitmo ? 'Abaixo do ritmo necessário' : undefined}
         rodape={a.falta === 0 ? 'Meta já atingida' : a.diasRestantes ? `Necessário: ${brl(a.ritmoNecessario)}/dia` : 'Mês encerrado'} />
-      <Kpi titulo="Dias restantes" valor={String(a.diasRestantes)} rodape={`de ${a.diasMes} · projeção ${brl(a.projecao)}`} />
+      <Kpi titulo="Dias restantes" valor={`${a.diasRestantes} de ${a.diasMes}`} rodape={`Projeção ${brl(a.projecao)}`} />
       <div className="col-span-2 lg:col-span-4">
         <div className="h-3 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(a.pct)} aria-valuemin={0} aria-valuemax={100} aria-label="Percentual da meta">
           <div className={cn('h-full rounded-full transition-[width] duration-1000 ease-out', a.pct >= 100 ? 'bg-emerald-500' : 'bg-primary')}
@@ -84,11 +84,11 @@ function MeuAndamento({ meta, vendido, mes }: { meta: number; vendido: number; m
 function PremioCard({ premio, mes }: { premio: Premio | null | undefined; mes: string }) {
   if (!premio) return null
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-amber-400/5 to-transparent p-4">
-      <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400"><Trophy className="size-6" /></div>
+    <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-amber-400/5 to-transparent p-4 sm:gap-4">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-600 sm:size-12 dark:text-amber-400"><Trophy className="size-5 sm:size-6" /></div>
       <div className="min-w-0">
         <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-400">Megaprêmio de {mesAno(mes)}</p>
-        <p className="text-lg font-semibold">{premio.descricao}</p>
+        <p className="text-base leading-snug font-semibold sm:text-lg">{premio.descricao}</p>
         <p className="text-xs text-muted-foreground">Ganha quem tiver o maior % da meta{Number(premio.pct_minimo) > 0 ? `, atingindo ao menos ${pct(premio.pct_minimo, 0)}` : ''}.</p>
       </div>
     </div>
@@ -111,7 +111,7 @@ function Pista({ linhas, pctMinimo, valores }: { linhas: Corredor[]; pctMinimo: 
         const elegivel = pctMinimo != null && p >= Number(pctMinimo)
         return (
           <li key={l.user_id} className={cn('rounded-xl border p-2 transition-colors sm:p-3', l.eu && 'border-primary/50 bg-primary/5', ehLider && 'border-amber-500/60 bg-amber-500/5')}>
-            <div className="mb-1.5 flex items-center gap-2 text-sm">
+            <div className="mb-3 flex items-center gap-2 text-sm">
               <span className={cn('w-7 text-center font-semibold tabular', ehLider ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>{i + 1}º</span>
               <span className="min-w-0 flex-1 truncate font-medium">{l.nome}{l.eu && <span className="ml-1 text-xs text-primary">(você)</span>}</span>
               {elegivel && <Trophy className="size-4 shrink-0 text-emerald-600 sm:hidden dark:text-emerald-400" aria-label="No páreo do prêmio" />}
@@ -119,7 +119,7 @@ function Pista({ linhas, pctMinimo, valores }: { linhas: Corredor[]; pctMinimo: 
               {valores && l.vendido != null && <span className="hidden text-xs text-muted-foreground tabular md:inline">{brl(l.vendido)} / {brl(l.meta)}</span>}
               <span className="w-16 text-right font-semibold tabular">{pct(p)}</span>
             </div>
-            {valores && l.vendido != null && <p className="-mt-1 mb-1.5 pl-9 text-xs text-muted-foreground tabular md:hidden">{brl(l.vendido)} / {brl(l.meta)}</p>}
+            {valores && l.vendido != null && <p className="-mt-2 mb-3 pl-9 text-xs text-muted-foreground tabular md:hidden">{brl(l.vendido)} / {brl(l.meta)}</p>}
             <div className="relative h-10 rounded-lg bg-[repeating-linear-gradient(90deg,var(--muted)_0_24px,transparent_24px_48px)] ring-1 ring-border">
               <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-muted-foreground/30" />
               {/* linha de chegada (100%) */}
@@ -188,7 +188,7 @@ function AdminMetas({ mes, corrida, premio }: { mes: string; corrida: Corredor[]
                 </div>
               ))}
               {semVinculo.length > 0 && <Aviso>Sem vínculo com vendedor do Bling (as vendas não contam): {semVinculo.map(v => v.nome || v.email).join(', ')}. <Link className="underline" to="/config/vendedores">Vincular</Link></Aviso>}
-              <Button onClick={() => salvarMetas.mutate()} disabled={salvarMetas.isPending}>{salvarMetas.isPending ? <Spinner /> : <Save />}Salvar metas</Button>
+              <Button className="max-sm:w-full" onClick={() => salvarMetas.mutate()} disabled={salvarMetas.isPending}>{salvarMetas.isPending ? <Spinner /> : <Save />}Salvar metas</Button>
             </>}
         </CardContent>
       </Card>
@@ -198,11 +198,11 @@ function AdminMetas({ mes, corrida, premio }: { mes: string; corrida: Corredor[]
           <form className="space-y-3" onSubmit={e => { e.preventDefault(); salvarPremio.mutate() }}>
             <Campo rotulo="Prêmio" ajuda="Deixe em branco para remover o prêmio do mês."><Input value={p.descricao} maxLength={300} placeholder="Ex.: Fim de semana na serra"
               onChange={e => setP({ ...p, descricao: e.target.value })} /></Campo>
-            <Campo rotulo="Critério: maior % da meta, atingindo ao menos" className="w-64">
+            <Campo rotulo="Critério: maior % da meta, atingindo ao menos" className="w-full sm:w-64">
               <div className="relative"><Input type="number" min={0} max={1000} step={1} className="pr-7 text-right" value={p.pct_minimo}
                 onChange={e => setP({ ...p, pct_minimo: Number(e.target.value) })} /><span className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-muted-foreground">%</span></div>
             </Campo>
-            <Button type="submit" disabled={salvarPremio.isPending}>{salvarPremio.isPending ? <Spinner /> : <Save />}Salvar prêmio</Button>
+            <Button type="submit" className="max-sm:w-full" disabled={salvarPremio.isPending}>{salvarPremio.isPending ? <Spinner /> : <Save />}Salvar prêmio</Button>
           </form>
         </CardContent>
       </Card>
@@ -253,7 +253,7 @@ export function CadastroVendedores() {
             <Campo rotulo="Nome" className="w-full sm:w-56"><Input required minLength={2} value={novo.nome} onChange={e => setNovo({ ...novo, nome: e.target.value })} /></Campo>
             <Campo rotulo="E-mail" className="w-full sm:w-64"><Input type="email" required value={novo.email} onChange={e => setNovo({ ...novo, email: e.target.value })} /></Campo>
             <Campo rotulo="Senha inicial" ajuda="Mínimo 8 caracteres." className="w-full sm:w-48"><Input type="text" required minLength={8} autoComplete="new-password" value={novo.senha} onChange={e => setNovo({ ...novo, senha: e.target.value })} /></Campo>
-            <Button type="submit" disabled={criar.isPending}>{criar.isPending ? <Spinner /> : <UserPlus />}Criar login</Button>
+            <Button type="submit" className="max-sm:w-full" disabled={criar.isPending}>{criar.isPending ? <Spinner /> : <UserPlus />}Criar login</Button>
           </form>
           <p className="mt-3 text-xs text-muted-foreground">Para remover um vendedor ou mudar o papel, use <Link className="underline" to="/config/usuarios">Usuários</Link>. Esqueceu a senha? O vendedor usa "Esqueci a senha" na tela de login.</p>
         </CardContent>
@@ -261,7 +261,7 @@ export function CadastroVendedores() {
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle>Vendedores do Bling</CardTitle>
-          <Button variant="outline" size="sm" onClick={() => sincronizar.mutate()} disabled={sincronizar.isPending}>{sincronizar.isPending ? <Spinner /> : <RefreshCw />}Buscar no Bling e vincular vendas</Button>
+          <Button variant="outline" size="sm" className="max-sm:w-full" onClick={() => sincronizar.mutate()} disabled={sincronizar.isPending}>{sincronizar.isPending ? <Spinner /> : <RefreshCw />}Buscar no Bling e vincular vendas</Button>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground">Ligue cada vendedor do Bling ao login do vendedor aqui. As vendas importadas com esse vendedor passam a contar na meta (inclusive as já importadas).</p>
