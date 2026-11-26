@@ -17,6 +17,7 @@ import { Confirmar, Erro, PageHeader, Spinner, Status } from '@/components/commo
 import { traduzirErro } from '@/components/CrudPage'
 import { cn } from '@/lib/utils'
 import { ImportarContas } from '@/components/ImportarContas'
+import { separarExclusaoLote } from '@/lib/contasLote'
 
 export interface Titulo {
   id: string; organizacao_id: string; empresa_id: string; tipo: 'pagar' | 'receber'; descricao: string; contato_id: string | null
@@ -50,6 +51,7 @@ export default function Contas() {
   const [cancelar, setCancelar] = useState<Titulo | null>(null)
   const [excluir, setExcluir] = useState<Titulo | null>(null)
   const [lote, setLote] = useState(false)
+  const [excluirLote, setExcluirLote] = useState(false)
   const [importar, setImportar] = useState(false)
 
   const q = useQuery({
@@ -107,6 +109,29 @@ export default function Contas() {
     mutationFn: async (t: Titulo) => unwrap(await supabase.from('titulos').delete().eq('id', t.id)),
     onSuccess: () => { toast.success('Título excluído.'); setExcluir(null); qc.invalidateQueries({ queryKey: ['titulos'] }) },
     onError: (e: Error) => { toast.error(traduzirErro(e.message)); setExcluir(null) },
+  })
+  // Exclusão em lote: manuais/planilha sem baixa são excluídos; Bling/empréstimos são cancelados
+  // (excluídos, voltariam na próxima sincronização); com baixa ou gerados por venda ficam de fora.
+  const loteExc = useMemo(() => separarExclusaoLote((q.data ?? []).filter(t => sel.has(t.id))), [q.data, sel])
+  const excluirLoteM = useMutation({
+    mutationFn: async () => {
+      let excluidos = 0, cancelados = 0
+      for (let i = 0; i < loteExc.excluir.length; i += 200) {
+        const r = unwrap(await supabase.from('titulos').delete().in('id', loteExc.excluir.slice(i, i + 200).map(t => t.id)).select('id')) as unknown[]
+        excluidos += r.length
+      }
+      for (let i = 0; i < loteExc.cancelar.length; i += 200) {
+        const r = unwrap(await supabase.from('titulos').update({ status: 'cancelado' }).in('id', loteExc.cancelar.slice(i, i + 200).map(t => t.id)).select('id')) as unknown[]
+        cancelados += r.length
+      }
+      return { excluidos, cancelados }
+    },
+    onSuccess: ({ excluidos, cancelados }) => {
+      toast.success([excluidos && `${excluidos} excluída(s)`, cancelados && `${cancelados} cancelada(s)`, loteExc.pular.length && `${loteExc.pular.length} pulada(s)`].filter(Boolean).join(', ') + '.')
+      setExcluirLote(false); setSel(new Set())
+    },
+    onError: (e: Error) => { toast.error(traduzirErro(e.message)); setExcluirLote(false) },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['titulos'] }),
   })
 
   const sugDe = (id: string) => sugestoes.data?.find(s => s.alvo_id === id)
@@ -167,6 +192,7 @@ export default function Contas() {
         acoesSelecao={<>
           <Button size="sm" onClick={() => setLote(true)}><CheckCheck />Baixar em lote</Button>
           <Button size="sm" variant="outline" onClick={() => categorizarIA.mutate()} disabled={categorizarIA.isPending}>{categorizarIA.isPending ? <Spinner /> : <Sparkles />}Categorizar com IA</Button>
+          <Button size="sm" variant="outline" className="text-destructive" onClick={() => setExcluirLote(true)}><Trash2 />Excluir selecionadas</Button>
         </>}
         barra={<>
           <Seletor aria-label="Status" className="w-auto" value={filtroStatus} onChange={e => setFiltro('status', e.target.value)}
@@ -189,6 +215,14 @@ export default function Contas() {
         perigo textoBotao="Cancelar título" carregando={cancelarM.isPending} onFechar={() => setCancelar(null)} onConfirmar={() => cancelarM.mutate(cancelar!)} />
       <Confirmar aberto={!!excluir} titulo="Excluir título?" descricao="A exclusão é registrada na auditoria e não pode ser desfeita." perigo textoBotao="Excluir"
         carregando={excluirM.isPending} onFechar={() => setExcluir(null)} onConfirmar={() => excluirM.mutate(excluir!)} />
+      <Confirmar aberto={excluirLote} titulo={`Excluir ${sel.size} conta(s) selecionada(s)?`} perigo textoBotao="Confirmar exclusão"
+        carregando={excluirLoteM.isPending} onFechar={() => setExcluirLote(false)} onConfirmar={() => excluirLoteM.mutate()}>
+        <ul className="space-y-1 text-sm">
+          {loteExc.excluir.length > 0 && <li><b>{loteExc.excluir.length}</b> lançada(s) à mão ou por planilha serão <b>excluídas</b> ({brl(loteExc.excluir.reduce((s, t) => s + Number(t.valor), 0))}). Não pode ser desfeito.</li>}
+          {loteExc.cancelar.length > 0 && <li><b>{loteExc.cancelar.length}</b> vinda(s) do Bling ou de empréstimos serão <b>canceladas</b>: saem da DRE e do caixa, o registro fica para auditoria.</li>}
+          {loteExc.pular.length > 0 && <li><b>{loteExc.pular.length}</b> serão <b>puladas</b> (já têm pagamento, são de venda ou já estão canceladas).</li>}
+        </ul>
+      </Confirmar>
     </div>
   )
 }
