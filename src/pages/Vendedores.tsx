@@ -1,5 +1,6 @@
 // Metas de vendedores: andamento do mês, megaprêmio e corrida.
-// O vendedor só recebe do banco os próprios valores em R$; dos colegas, nome e % (fn_corrida_vendedores).
+// A corrida é ordenada pelo valor vendido. O vendedor só recebe do banco os próprios valores em R$;
+// dos colegas, nome, ordem e % da meta (fn_corrida_vendedores).
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -114,21 +115,25 @@ function PremioCard({ premio, mes }: { premio: Premio | null | undefined; mes: s
       <div className="min-w-0">
         <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-400">Megaprêmio de {mesAno(mes)}</p>
         <p className="text-base leading-snug font-semibold sm:text-lg">{premio.descricao}</p>
-        <p className="text-xs text-muted-foreground">Ganha quem tiver o maior % da meta Alcançável{Number(premio.pct_minimo) > 0 ? `, atingindo ao menos ${pct(premio.pct_minimo, 0)}` : ''}.</p>
+        <p className="text-xs text-muted-foreground">Ganha quem vender mais no mês{Number(premio.pct_minimo) > 0 ? `, tendo atingido ao menos ${pct(premio.pct_minimo, 0)} da própria meta Alcançável` : ''}.</p>
       </div>
     </div>
   )
 }
 
-/** Pista de corrida: cada vendedor avança conforme o % da meta Alcançável; chegada em 100%, com marcas na Desejável e na Supermeta */
+/**
+ * Pista de corrida por valor vendido. Com `valores` (administração): distância proporcional ao R$ e as três metas
+ * de cada um marcadas na própria raia. Sem `valores` (vendedor): só a ordem, em degraus iguais, porque a
+ * distância proporcional deixaria calcular o R$ dos colegas a partir do próprio valor.
+ */
 function Pista({ linhas, pctMinimo, valores, cfg }: { linhas: Corredor[]; pctMinimo: number | null; valores: boolean; cfg: NiveisConfig }) {
   const [largou, setLargou] = useState(false)
   useEffect(() => { const t = requestAnimationFrame(() => setLargou(true)); return () => cancelAnimationFrame(t) }, [])
   const niveis = niveisDaMeta(100, cfg)   // em % da Alcançável: 100, 120, 130
-  const escala = Math.max(niveis[2].pctBase, ...linhas.map(l => Number(l.pct))) * 1.08
+  const escala = Math.max(1, ...linhas.map(l => Math.max(Number(l.vendido ?? 0), Number(l.meta ?? 0) * niveis[2].pctBase / 100))) * 1.04
   const lider = Number(linhas[0]?.pct) > 0 ? linhas[0].user_id : null
   const cor = useMemo(() => new Map(linhas.map((l, i) => [l.user_id, CORES[i % CORES.length]])), [linhas])
-  const pos = (p: number) => `${(Math.min(p, escala) / escala) * 100}%`
+  const pos = (v: number) => `${(Math.min(v, escala) / escala) * 100}%`
   return (
     <ol className="space-y-3" aria-label="Classificação da corrida">
       {linhas.map((l, i) => {
@@ -136,6 +141,7 @@ function Pista({ linhas, pctMinimo, valores, cfg }: { linhas: Corredor[]; pctMin
         const ehLider = l.user_id === lider
         const elegivel = pctMinimo != null && p >= Number(pctMinimo)
         const nivel = niveis.filter(n => p >= n.pctBase).pop()
+        const avanco = valores ? pos(Number(l.vendido)) : p > 0 ? `${((linhas.length - i) / linhas.length) * 92}%` : '0%'
         return (
           <li key={l.user_id} className={cn('rounded-xl border p-2 transition-colors sm:p-3', l.eu && 'border-primary/50 bg-primary/5', ehLider && 'border-amber-500/60 bg-amber-500/5')}>
             <div className="mb-3 flex items-center gap-2 text-sm">
@@ -144,19 +150,21 @@ function Pista({ linhas, pctMinimo, valores, cfg }: { linhas: Corredor[]; pctMin
               {nivel && <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary sm:inline">{nivel.nome}</span>}
               {elegivel && <Trophy className="size-4 shrink-0 text-emerald-600 sm:hidden dark:text-emerald-400" aria-label="No páreo do prêmio" />}
               {elegivel && <span className="hidden rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:inline dark:text-emerald-400">no páreo do prêmio</span>}
-              {valores && l.vendido != null && <span className="hidden text-xs text-muted-foreground tabular md:inline">{brl(l.vendido)} / {brl(l.meta)}</span>}
-              <span className="w-16 text-right font-semibold tabular">{pct(p)}</span>
+              {l.meta != null && <span className="hidden text-xs text-muted-foreground tabular md:inline">{pct(p)} de {brl(l.meta)}</span>}
+              {l.vendido != null && <span className="text-right font-semibold tabular">{brl(l.vendido)}</span>}
             </div>
-            {valores && l.vendido != null && <p className="-mt-2 mb-3 pl-9 text-xs text-muted-foreground tabular md:hidden">{brl(l.vendido)} / {brl(l.meta)}</p>}
+            {l.meta != null && <p className="-mt-2 mb-3 pl-9 text-xs text-muted-foreground tabular md:hidden">{pct(p)} de {brl(l.meta)}</p>}
             <div className="relative h-10 rounded-lg bg-[repeating-linear-gradient(90deg,var(--muted)_0_24px,transparent_24px_48px)] ring-1 ring-border">
               <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-muted-foreground/30" />
-              {/* linha de chegada (100%) */}
-              <div className="absolute inset-y-0 w-2 bg-[repeating-conic-gradient(var(--foreground)_0_25%,transparent_0_50%)] bg-[length:8px_8px] opacity-60" style={{ left: pos(100) }} aria-hidden />
-              {/* Desejável e Supermeta */}
-              {niveis.slice(1).map(n => <div key={n.nome} className="absolute inset-y-0 border-l-2 border-dashed border-foreground/40" style={{ left: pos(n.pctBase) }} title={`${n.nome} (${pct(n.pctBase, 0)})`} aria-hidden />)}
+              {/* metas da própria raia: Alcançável quadriculada, Desejável e Supermeta tracejadas */}
+              {valores && l.meta != null && niveis.map((n, k) => {
+                const alvo = Number(l.meta) * n.pctBase / 100
+                return <div key={n.nome} title={`${n.nome}: ${brl(alvo)}`} aria-hidden style={{ left: pos(alvo) }} className={cn('absolute inset-y-0',
+                  k ? 'border-l-2 border-dashed border-foreground/40' : 'w-2 bg-[repeating-conic-gradient(var(--foreground)_0_25%,transparent_0_50%)] bg-[length:8px_8px] opacity-60')} />
+              })}
               <div className={cn('absolute inset-y-1 left-0 rounded-md opacity-25 transition-[width] duration-[1600ms] ease-out', cor.get(l.user_id))}
-                style={{ width: largou ? pos(p) : '0%', transitionDelay: `${i * 120}ms` }} />
-              <div className="absolute top-1/2 -translate-x-full -translate-y-1/2 transition-[left] duration-[1600ms] ease-out" style={{ left: `max(2.25rem, ${largou ? pos(p) : '0%'})`, transitionDelay: `${i * 120}ms` }}>
+                style={{ width: largou ? avanco : '0%', transitionDelay: `${i * 120}ms` }} />
+              <div className="absolute top-1/2 -translate-x-full -translate-y-1/2 transition-[left] duration-[1600ms] ease-out" style={{ left: `max(2.25rem, ${largou ? avanco : '0%'})`, transitionDelay: `${i * 120}ms` }}>
                 <div className={cn('relative flex size-8 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-md motion-safe:animate-[corrida_0.6s_ease-in-out_infinite_alternate]',
                   cor.get(l.user_id), ehLider && 'ring-2 ring-amber-400 ring-offset-2 ring-offset-background')}>
                   {iniciais(l.nome)}
@@ -256,7 +264,7 @@ function AdminMetas({ mes, corrida, premio, cfg }: { mes: string; corrida: Corre
           <form className="space-y-3" onSubmit={e => { e.preventDefault(); salvarPremio.mutate() }}>
             <Campo rotulo="Prêmio" ajuda="Deixe em branco para remover o prêmio do mês."><Input value={p.descricao} maxLength={300} placeholder="Ex.: Fim de semana na serra"
               onChange={e => setP({ ...p, descricao: e.target.value })} /></Campo>
-            <Campo rotulo="Critério: maior % da meta Alcançável, atingindo ao menos" className="w-full sm:w-64">
+            <Campo rotulo="Critério: maior valor vendido, atingindo ao menos este % da meta Alcançável" className="w-full sm:w-64">
               <div className="relative"><Input type="number" min={0} max={1000} step={1} className="pr-7 text-right" value={p.pct_minimo}
                 onChange={e => setP({ ...p, pct_minimo: Number(e.target.value) })} /><span className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-muted-foreground">%</span></div>
             </Campo>

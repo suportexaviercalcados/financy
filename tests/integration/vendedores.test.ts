@@ -93,9 +93,9 @@ describe('Papel vendedor e metas', () => {
     expect(pr.data ?? []).toEqual([])
   })
 
-  it('corrida: vendedor vê o próprio andamento em R$ e só nome/% dos colegas', async () => {
+  it('corrida: ordem por valor vendido; vendedor vê o próprio R$ e só nome/% dos colegas', async () => {
     const r = ok(await a.client.rpc('fn_corrida_vendedores', { p_org: o.orgId, p_competencia: mes })) as any[]
-    expect(r.map(x => x.nome)).toEqual(['Bruno', 'Ana'])        // 50% > 30%
+    expect(r.map(x => x.nome)).toEqual(['Ana', 'Bruno'])        // R$ 900 > R$ 500, apesar de 30% < 50%
     const ana = r.find(x => x.eu)
     expect(ana.user_id).toBe(a.userId)
     expect(n(ana.meta)).toBe(3000)
@@ -109,7 +109,7 @@ describe('Papel vendedor e metas', () => {
 
   it('corrida: dono vê os valores de todos', async () => {
     const r = ok(await o.client.rpc('fn_corrida_vendedores', { p_org: o.orgId, p_competencia: mes })) as any[]
-    expect(r.map(x => [x.nome, n(x.meta), n(x.vendido)])).toEqual([['Bruno', 1000, 500], ['Ana', 3000, 900]])
+    expect(r.map(x => [x.nome, n(x.meta), n(x.vendido)])).toEqual([['Ana', 3000, 900], ['Bruno', 1000, 500]])
   })
 
   it('quem não é da organização não vê a corrida', async () => {
