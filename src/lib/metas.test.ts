@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { andamento } from './metas'
+import { andamento, comissaoDaMeta, NIVEIS_PADRAO, niveisDaMeta } from './metas'
 
 describe('andamento da meta', () => {
   it('meio do mês: ritmos e dias', () => {
@@ -21,5 +21,22 @@ describe('andamento da meta', () => {
   it('mês futuro', () => {
     const a = andamento(1000, 0, '2026-12-01', '2026-11-10')
     expect([a.diasDecorridos, a.diasRestantes, a.ritmoAtual]).toEqual([0, 31, 0])
+  })
+})
+
+describe('metas em 3 níveis', () => {
+  it('Desejável e Supermeta são +20% e +30% da Alcançável', () => {
+    expect(niveisDaMeta(53773, NIVEIS_PADRAO).map(n => [n.nome, n.meta, n.comissaoPct, n.pctBase])).toEqual([
+      ['Alcançável', 53773, 1, 100], ['Desejável', 64527.6, 1.5, 120], ['Supermeta', 69904.9, 2, 130]])
+  })
+  it('comissão vale sobre todo o vendido, conforme o nível atingido', () => {
+    const c = (vendido: number) => { const r = comissaoDaMeta(10000, vendido, NIVEIS_PADRAO); return [r.atual?.nome ?? null, r.proximo?.nome ?? null, r.comissao] }
+    expect(c(9999.99)).toEqual([null, 'Alcançável', 0])
+    expect(c(10000)).toEqual(['Alcançável', 'Desejável', 100])
+    expect(c(12000)).toEqual(['Desejável', 'Supermeta', 180])
+    expect(c(15000)).toEqual(['Supermeta', null, 300])
+  })
+  it('sem meta não há nível nem comissão', () => {
+    expect(comissaoDaMeta(0, 5000, NIVEIS_PADRAO).comissao).toBe(0)
   })
 })

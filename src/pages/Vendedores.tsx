@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown, Flag, Gift, RefreshCw, Save, Trophy, UserPlus } from 'lucide-react'
+import { Check, Crown, Flag, Gift, RefreshCw, Save, Trophy, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase, rpc, unwrap, edge } from '@/lib/supabase'
 import { useOrg } from '@/contexts/org'
 import { brl, hoje, inicioMes, mesAno, pct } from '@/lib/format'
-import { andamento } from '@/lib/metas'
+import { andamento, comissaoDaMeta, NIVEIS_PADRAO, niveisDaMeta, type NiveisConfig } from '@/lib/metas'
 import { cn } from '@/lib/utils'
 import { Aviso, Carregando, Erro, Kpi, PageHeader, Spinner, Vazio } from '@/components/common'
 import { Campo, EntradaValor, Seletor } from '@/components/form'
@@ -31,16 +31,20 @@ export default function Vendedores() {
   const premio = useQuery({ queryKey: ['premio', org?.id, mes], enabled: !!org,
     queryFn: async () => unwrap(await supabase.from('premios_mes').select('descricao, pct_minimo').eq('organizacao_id', org!.id)
       .eq('competencia', mes).maybeSingle()) as Premio | null })
+  const niveisMes = useQuery({ queryKey: ['niveis', org?.id, mes], enabled: !!org,
+    queryFn: async () => unwrap(await supabase.from('metas_niveis_mes').select('pct_desejavel, pct_super, com_alcancavel, com_desejavel, com_super')
+      .eq('organizacao_id', org!.id).eq('competencia', mes).maybeSingle()) as NiveisConfig | null })
+  const cfg = niveisMes.data ?? NIVEIS_PADRAO
   const linhas = corrida.data ?? []
   const eu = linhas.find(l => l.eu)
 
   return (
     <div className="space-y-6 max-sm:[&_button]:min-h-10 max-sm:[&_input]:h-10 max-sm:[&_select]:h-10">
       <PageHeader titulo={ehVendedor ? 'Minhas metas' : 'Metas de vendedores'}
-        descricao={ehVendedor ? 'Seu andamento no mês e a corrida pelo megaprêmio.' : 'Meta mensal de cada vendedor, megaprêmio e corrida da equipe.'}
+        descricao={ehVendedor ? 'Seu andamento no mês, sua comissão e a corrida pelo megaprêmio.' : 'Metas, comissões e megaprêmio de cada vendedor, e a corrida da equipe.'}
         acoes={<Campo rotulo="Mês" className="w-48"><Input type="month" value={mes.slice(0, 7)} onChange={e => e.target.value && setMes(e.target.value + '-01')} /></Campo>} />
       {corrida.error && <Erro erro={corrida.error} />}
-      {eu && eu.meta != null && <MeuAndamento meta={Number(eu.meta)} vendido={Number(eu.vendido)} mes={mes} />}
+      {eu && eu.meta != null && <MeuAndamento meta={Number(eu.meta)} vendido={Number(eu.vendido)} mes={mes} cfg={cfg} />}
       {ehVendedor && !corrida.isLoading && !eu && <Aviso>Você ainda não tem meta para {mesAno(mes)}. Fale com o administrador.</Aviso>}
       <PremioCard premio={premio.data} mes={mes} />
       <Card className="max-sm:[--card-spacing:--spacing(3)]">
@@ -48,32 +52,53 @@ export default function Vendedores() {
         <CardContent>
           {corrida.isLoading ? <Carregando linhas={3} /> : !linhas.length
             ? <Vazio titulo="Nenhum vendedor com meta neste mês" descricao={podeAdministrar ? 'Defina as metas abaixo para a corrida começar.' : undefined} />
-            : <Pista linhas={linhas} pctMinimo={premio.data?.pct_minimo ?? null} valores={!ehVendedor} />}
+            : <Pista linhas={linhas} pctMinimo={premio.data?.pct_minimo ?? null} valores={!ehVendedor} cfg={cfg} />}
         </CardContent>
       </Card>
-      {podeAdministrar && <AdminMetas mes={mes} corrida={linhas} premio={premio.data ?? null} />}
+      {podeAdministrar && <AdminMetas mes={mes} corrida={linhas} premio={premio.data ?? null} cfg={cfg} />}
     </div>
   )
 }
 
-function MeuAndamento({ meta, vendido, mes }: { meta: number; vendido: number; mes: string }) {
-  const a = andamento(meta, vendido, mes, hoje())
+function MeuAndamento({ meta, vendido, mes, cfg }: { meta: number; vendido: number; mes: string; cfg: NiveisConfig }) {
+  const { niveis, atual, proximo, comissao } = comissaoDaMeta(meta, vendido, cfg)
+  // andamento em relação ao próximo nível (ou à Supermeta, quando já bateu todos)
+  const a = andamento((proximo ?? niveis[2]).meta, vendido, mes, hoje())
   const noRitmo = a.ritmoAtual >= a.ritmoNecessario
+  const projetado = comissaoDaMeta(meta, a.projecao, cfg).atual
+  const escala = Math.max(niveis[2].meta, vendido) * 1.04
+  const pos = (v: number) => `${Math.min(100, (v / escala) * 100)}%`
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Kpi titulo="Vendido no mês" valor={brl(vendido)} rodape={`Meta ${brl(meta)}`} />
-      <Kpi titulo="% da meta" valor={pct(a.pct)} rodape={a.falta > 0 ? `Faltam ${brl(a.falta)}` : 'Meta batida! 🎉'} />
-      <Kpi titulo="Ritmo por dia" valor={brl(a.ritmoAtual)} alerta={a.falta > 0 && a.diasRestantes > 0 && !noRitmo ? 'Abaixo do ritmo necessário' : undefined}
-        rodape={a.falta === 0 ? 'Meta já atingida' : a.diasRestantes ? `Necessário: ${brl(a.ritmoNecessario)}/dia` : 'Mês encerrado'} />
-      <Kpi titulo="Dias restantes" valor={`${a.diasRestantes} de ${a.diasMes}`} rodape={`Projeção ${brl(a.projecao)}`} />
+      <Kpi titulo="Vendido no mês" valor={brl(vendido)} rodape={`${pct((vendido / meta) * 100)} da meta Alcançável`} />
+      <Kpi titulo="Comissão garantida" valor={brl(comissao)}
+        rodape={atual ? `${pct(atual.comissaoPct)} do vendido · nível ${atual.nome}` : `Bata a Alcançável para ganhar ${pct(niveis[0].comissaoPct)}`} />
+      <Kpi titulo={proximo ? `Falta para a ${proximo.nome}` : 'Próximo nível'} valor={proximo ? brl(a.falta) : 'Supermeta batida! 🎉'}
+        rodape={proximo ? `Comissão ${atual ? 'sobe para' : 'de'} ${pct(proximo.comissaoPct)}: ${brl(proximo.meta * proximo.comissaoPct / 100)} ou mais` : 'Você atingiu o nível máximo'} />
+      <Kpi titulo="Ritmo por dia" valor={brl(a.ritmoAtual)} alerta={proximo && a.diasRestantes > 0 && !noRitmo ? 'Abaixo do ritmo necessário' : undefined}
+        rodape={!proximo ? `${a.diasRestantes} de ${a.diasMes} dias restantes` : a.diasRestantes ? `Necessário: ${brl(a.ritmoNecessario)}/dia · ${a.diasRestantes} dias restantes` : 'Mês encerrado'} />
       <div className="col-span-2 lg:col-span-4">
-        <div className="h-3 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(a.pct)} aria-valuemin={0} aria-valuemax={100} aria-label="Percentual da meta">
-          <div className={cn('h-full rounded-full transition-[width] duration-1000 ease-out', a.pct >= 100 ? 'bg-emerald-500' : 'bg-primary')}
-            style={{ width: `${Math.min(100, a.pct)}%` }} />
+        <div className="relative h-3 rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(vendido)} aria-valuemin={0} aria-valuemax={Math.round(niveis[2].meta)}
+          aria-label="Vendido em relação às três metas" aria-valuetext={`${brl(vendido)} de ${brl(niveis[2].meta)}`}>
+          <div className={cn('h-full rounded-full transition-[width] duration-1000 ease-out', atual ? 'bg-emerald-500' : 'bg-primary')} style={{ width: pos(vendido) }} />
+          {niveis.map(n => <span key={n.nome} aria-hidden className="absolute -inset-y-1 w-0.5 rounded-full bg-foreground/60" style={{ left: pos(n.meta) }} />)}
         </div>
-        {a.falta > 0 && a.diasRestantes > 0 && (
-          <p className={cn('mt-2 text-sm', noRitmo ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400')}>
-            {noRitmo ? 'No ritmo atual você bate a meta. Continue assim!' : `Acelere: venda ${brl(a.ritmoNecessario)} por dia para bater a meta.`}
+        <ol className="mt-3 grid grid-cols-3 gap-2" aria-label="Níveis de meta">
+          {niveis.map(n => {
+            const ok = vendido >= n.meta
+            return (
+              <li key={n.nome} className={cn('rounded-lg border p-2 text-xs', ok ? 'border-emerald-500/50 bg-emerald-500/10' : n === proximo && 'border-primary/50 bg-primary/5')}>
+                <p className="flex items-center gap-1 font-medium">{ok && <Check className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Atingida" />}<span className="truncate">{n.nome}</span></p>
+                <p className="font-semibold tabular sm:text-sm">{brl(n.meta)}</p>
+                <p className="text-muted-foreground">comissão {pct(n.comissaoPct)}</p>
+              </li>
+            )
+          })}
+        </ol>
+        {a.diasRestantes > 0 && a.diasDecorridos > 0 && (
+          <p className={cn('mt-2 text-sm', !proximo || noRitmo ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400')}>
+            No ritmo atual você fecha o mês em {brl(a.projecao)}{projetado ? `, no nível ${projetado.nome}` : ', abaixo da Alcançável'}.
+            {proximo && !noRitmo && ` Venda ${brl(a.ritmoNecessario)} por dia para chegar à ${proximo.nome}.`}
           </p>
         )}
       </div>
@@ -89,17 +114,18 @@ function PremioCard({ premio, mes }: { premio: Premio | null | undefined; mes: s
       <div className="min-w-0">
         <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-400">Megaprêmio de {mesAno(mes)}</p>
         <p className="text-base leading-snug font-semibold sm:text-lg">{premio.descricao}</p>
-        <p className="text-xs text-muted-foreground">Ganha quem tiver o maior % da meta{Number(premio.pct_minimo) > 0 ? `, atingindo ao menos ${pct(premio.pct_minimo, 0)}` : ''}.</p>
+        <p className="text-xs text-muted-foreground">Ganha quem tiver o maior % da meta Alcançável{Number(premio.pct_minimo) > 0 ? `, atingindo ao menos ${pct(premio.pct_minimo, 0)}` : ''}.</p>
       </div>
     </div>
   )
 }
 
-/** Pista de corrida: cada vendedor avança conforme o % da meta; a linha de chegada é 100% */
-function Pista({ linhas, pctMinimo, valores }: { linhas: Corredor[]; pctMinimo: number | null; valores: boolean }) {
+/** Pista de corrida: cada vendedor avança conforme o % da meta Alcançável; chegada em 100%, com marcas na Desejável e na Supermeta */
+function Pista({ linhas, pctMinimo, valores, cfg }: { linhas: Corredor[]; pctMinimo: number | null; valores: boolean; cfg: NiveisConfig }) {
   const [largou, setLargou] = useState(false)
   useEffect(() => { const t = requestAnimationFrame(() => setLargou(true)); return () => cancelAnimationFrame(t) }, [])
-  const escala = Math.max(100, ...linhas.map(l => Number(l.pct))) * 1.08
+  const niveis = niveisDaMeta(100, cfg)   // em % da Alcançável: 100, 120, 130
+  const escala = Math.max(niveis[2].pctBase, ...linhas.map(l => Number(l.pct))) * 1.08
   const lider = Number(linhas[0]?.pct) > 0 ? linhas[0].user_id : null
   const cor = useMemo(() => new Map(linhas.map((l, i) => [l.user_id, CORES[i % CORES.length]])), [linhas])
   const pos = (p: number) => `${(Math.min(p, escala) / escala) * 100}%`
@@ -109,11 +135,13 @@ function Pista({ linhas, pctMinimo, valores }: { linhas: Corredor[]; pctMinimo: 
         const p = Number(l.pct)
         const ehLider = l.user_id === lider
         const elegivel = pctMinimo != null && p >= Number(pctMinimo)
+        const nivel = niveis.filter(n => p >= n.pctBase).pop()
         return (
           <li key={l.user_id} className={cn('rounded-xl border p-2 transition-colors sm:p-3', l.eu && 'border-primary/50 bg-primary/5', ehLider && 'border-amber-500/60 bg-amber-500/5')}>
             <div className="mb-3 flex items-center gap-2 text-sm">
               <span className={cn('w-7 text-center font-semibold tabular', ehLider ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>{i + 1}º</span>
               <span className="min-w-0 flex-1 truncate font-medium">{l.nome}{l.eu && <span className="ml-1 text-xs text-primary">(você)</span>}</span>
+              {nivel && <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary sm:inline">{nivel.nome}</span>}
               {elegivel && <Trophy className="size-4 shrink-0 text-emerald-600 sm:hidden dark:text-emerald-400" aria-label="No páreo do prêmio" />}
               {elegivel && <span className="hidden rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:inline dark:text-emerald-400">no páreo do prêmio</span>}
               {valores && l.vendido != null && <span className="hidden text-xs text-muted-foreground tabular md:inline">{brl(l.vendido)} / {brl(l.meta)}</span>}
@@ -124,6 +152,8 @@ function Pista({ linhas, pctMinimo, valores }: { linhas: Corredor[]; pctMinimo: 
               <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-muted-foreground/30" />
               {/* linha de chegada (100%) */}
               <div className="absolute inset-y-0 w-2 bg-[repeating-conic-gradient(var(--foreground)_0_25%,transparent_0_50%)] bg-[length:8px_8px] opacity-60" style={{ left: pos(100) }} aria-hidden />
+              {/* Desejável e Supermeta */}
+              {niveis.slice(1).map(n => <div key={n.nome} className="absolute inset-y-0 border-l-2 border-dashed border-foreground/40" style={{ left: pos(n.pctBase) }} title={`${n.nome} (${pct(n.pctBase, 0)})`} aria-hidden />)}
               <div className={cn('absolute inset-y-1 left-0 rounded-md opacity-25 transition-[width] duration-[1600ms] ease-out', cor.get(l.user_id))}
                 style={{ width: largou ? pos(p) : '0%', transitionDelay: `${i * 120}ms` }} />
               <div className="absolute top-1/2 -translate-x-full -translate-y-1/2 transition-[left] duration-[1600ms] ease-out" style={{ left: `max(2.25rem, ${largou ? pos(p) : '0%'})`, transitionDelay: `${i * 120}ms` }}>
@@ -141,7 +171,7 @@ function Pista({ linhas, pctMinimo, valores }: { linhas: Corredor[]; pctMinimo: 
   )
 }
 
-function AdminMetas({ mes, corrida, premio }: { mes: string; corrida: Corredor[]; premio: Premio | null }) {
+function AdminMetas({ mes, corrida, premio, cfg }: { mes: string; corrida: Corredor[]; premio: Premio | null; cfg: NiveisConfig }) {
   const { org } = useOrg(); const qc = useQueryClient()
   const membros = useQuery({ queryKey: ['membros', org?.id], enabled: !!org, queryFn: () => rpc<any[]>('fn_membros', { p_org: org!.id }) })
   const vinculos = useQuery({ queryKey: ['map-vendedores', org?.id], enabled: !!org,
@@ -152,7 +182,11 @@ function AdminMetas({ mes, corrida, premio }: { mes: string; corrida: Corredor[]
   const [p, setP] = useState<Premio>({ descricao: '', pct_minimo: 100 })
   useEffect(() => { setMetas(Object.fromEntries(corrida.filter(c => c.meta != null).map(c => [c.user_id, Number(c.meta)]))) }, [corrida])
   useEffect(() => { setP(premio ?? { descricao: '', pct_minimo: 100 }) }, [premio])
-  const recarregar = () => { qc.invalidateQueries({ queryKey: ['corrida'] }); qc.invalidateQueries({ queryKey: ['premio'] }) }
+  const [n, setN] = useState<NiveisConfig>(cfg)
+  useEffect(() => { setN(cfg) }, [cfg])
+  const recarregar = () => { for (const k of ['corrida', 'premio', 'niveis']) qc.invalidateQueries({ queryKey: [k] }) }
+  const vendidoDe = new Map(corrida.map(c => [c.user_id, Number(c.vendido ?? 0)]))
+  const resultado = (userId: string) => (metas[userId] > 0 ? comissaoDaMeta(metas[userId], vendidoDe.get(userId) ?? 0, cfg) : null)
 
   const salvarMetas = useMutation({
     mutationFn: async () => {
@@ -171,24 +205,48 @@ function AdminMetas({ mes, corrida, premio }: { mes: string; corrida: Corredor[]
     },
     onSuccess: () => { toast.success('Megaprêmio salvo.'); recarregar() }, onError: (e: Error) => toast.error(traduzirErro(e.message)),
   })
+  const salvarNiveis = useMutation({
+    mutationFn: async () => {
+      if (!(n.pct_desejavel > 0 && n.pct_super > n.pct_desejavel)) throw new Error('A Supermeta precisa ficar acima da Desejável, e a Desejável acima da Alcançável.')
+      unwrap(await supabase.from('metas_niveis_mes').upsert({ organizacao_id: org!.id, competencia: mes, ...n }))
+    },
+    onSuccess: () => { toast.success('Níveis e comissões salvos.'); recarregar() }, onError: (e: Error) => toast.error(traduzirErro(e.message)),
+  })
   const semVinculo = vendedores.filter(v => !vinculos.data?.some(x => x.interno_id === v.user_id))
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <CardHeader><CardTitle>Metas de {mesAno(mes)}</CardTitle></CardHeader>
+      <Card className="lg:col-span-2">
+        <CardHeader><CardTitle>Metas e comissões de {mesAno(mes)}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {membros.isLoading ? <Carregando linhas={3} /> : !vendedores.length
             ? <Vazio titulo="Nenhum vendedor cadastrado" acao={<Link to="/config/vendedores" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"><UserPlus className="size-4" />Cadastrar vendedores</Link>} />
             : <>
-              {vendedores.map(v => (
-                <div key={v.user_id} className="flex items-center gap-3">
-                  <span className="min-w-0 flex-1 truncate text-sm">{v.nome || v.email}</span>
-                  <EntradaValor className="w-40" valor={metas[v.user_id]} onChange={x => setMetas(m => ({ ...m, [v.user_id]: x }))} placeholder="Sem meta" />
-                </div>
-              ))}
+              <p className="text-xs text-muted-foreground">Digite só a meta Alcançável. A Desejável (+{pct(cfg.pct_desejavel, 0)}) e a Supermeta (+{pct(cfg.pct_super, 0)}) são calculadas.</p>
+              <ul className="divide-y">
+                {vendedores.map(v => {
+                  const r = resultado(v.user_id)
+                  return (
+                    <li key={v.user_id} className="flex flex-wrap items-end gap-x-6 gap-y-2 py-3 first:pt-0">
+                      <span className="min-w-0 flex-1 basis-40 truncate self-center text-sm font-medium">{v.nome || v.email}</span>
+                      <Campo rotulo="Alcançável" className="w-40 max-sm:w-full">
+                        <EntradaValor valor={metas[v.user_id]} onChange={x => setMetas(m => ({ ...m, [v.user_id]: x }))} placeholder="Sem meta" />
+                      </Campo>
+                      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs max-sm:w-full sm:grid-cols-[repeat(4,7.5rem)] [&_dd]:text-sm [&_dd]:font-medium [&_dd]:tabular [&_dt]:text-muted-foreground">
+                        <div><dt>Desejável</dt><dd>{r ? brl(r.niveis[1].meta) : '—'}</dd></div>
+                        <div><dt>Supermeta</dt><dd>{r ? brl(r.niveis[2].meta) : '—'}</dd></div>
+                        <div><dt>Nível atingido</dt><dd>{r ? r.atual?.nome ?? 'Nenhum' : '—'}</dd></div>
+                        <div><dt>Comissão{r?.atual && ` (${pct(r.atual.comissaoPct)})`}</dt><dd>{r ? brl(r.comissao) : '—'}</dd></div>
+                      </dl>
+                    </li>
+                  )
+                })}
+              </ul>
               {semVinculo.length > 0 && <Aviso>Sem vínculo com vendedor do Bling (as vendas não contam): {semVinculo.map(v => v.nome || v.email).join(', ')}. <Link className="underline" to="/config/vendedores">Vincular</Link></Aviso>}
-              <Button className="max-sm:w-full" onClick={() => salvarMetas.mutate()} disabled={salvarMetas.isPending}>{salvarMetas.isPending ? <Spinner /> : <Save />}Salvar metas</Button>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                <p className="text-sm">Comissão total do mês até agora: <span className="font-semibold tabular">{brl(vendedores.reduce((t, v) => t + (resultado(v.user_id)?.comissao ?? 0), 0))}</span></p>
+                <Button className="max-sm:w-full" onClick={() => salvarMetas.mutate()} disabled={salvarMetas.isPending}>{salvarMetas.isPending ? <Spinner /> : <Save />}Salvar metas</Button>
+              </div>
             </>}
         </CardContent>
       </Card>
@@ -198,7 +256,7 @@ function AdminMetas({ mes, corrida, premio }: { mes: string; corrida: Corredor[]
           <form className="space-y-3" onSubmit={e => { e.preventDefault(); salvarPremio.mutate() }}>
             <Campo rotulo="Prêmio" ajuda="Deixe em branco para remover o prêmio do mês."><Input value={p.descricao} maxLength={300} placeholder="Ex.: Fim de semana na serra"
               onChange={e => setP({ ...p, descricao: e.target.value })} /></Campo>
-            <Campo rotulo="Critério: maior % da meta, atingindo ao menos" className="w-full sm:w-64">
+            <Campo rotulo="Critério: maior % da meta Alcançável, atingindo ao menos" className="w-full sm:w-64">
               <div className="relative"><Input type="number" min={0} max={1000} step={1} className="pr-7 text-right" value={p.pct_minimo}
                 onChange={e => setP({ ...p, pct_minimo: Number(e.target.value) })} /><span className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-muted-foreground">%</span></div>
             </Campo>
@@ -206,6 +264,35 @@ function AdminMetas({ mes, corrida, premio }: { mes: string; corrida: Corredor[]
           </form>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader><CardTitle>Níveis e comissões de {mesAno(mes)}</CardTitle></CardHeader>
+        <CardContent>
+          <form className="space-y-3" onSubmit={e => { e.preventDefault(); salvarNiveis.mutate() }}>
+            <div className="grid grid-cols-[1fr_6.5rem_6.5rem] items-center gap-x-3 gap-y-2 text-sm">
+              <span /><span className="text-xs text-muted-foreground">Acima da Alcançável</span><span className="text-xs text-muted-foreground">Comissão</span>
+              <span>Alcançável</span><span className="text-center text-muted-foreground">—</span>
+              <Pct rotulo="Comissão da Alcançável" valor={n.com_alcancavel} onChange={v => setN({ ...n, com_alcancavel: v })} />
+              <span>Desejável</span>
+              <Pct rotulo="Desejável: acima da Alcançável" valor={n.pct_desejavel} onChange={v => setN({ ...n, pct_desejavel: v })} />
+              <Pct rotulo="Comissão da Desejável" valor={n.com_desejavel} onChange={v => setN({ ...n, com_desejavel: v })} />
+              <span>Supermeta</span>
+              <Pct rotulo="Supermeta: acima da Alcançável" valor={n.pct_super} onChange={v => setN({ ...n, pct_super: v })} />
+              <Pct rotulo="Comissão da Supermeta" valor={n.com_super} onChange={v => setN({ ...n, com_super: v })} />
+            </div>
+            <p className="text-xs text-muted-foreground">A comissão vale sobre todo o valor vendido no mês (produtos menos desconto, sem frete), conforme o nível atingido. Abaixo da Alcançável não há comissão.</p>
+            <Button type="submit" className="max-sm:w-full" disabled={salvarNiveis.isPending}>{salvarNiveis.isPending ? <Spinner /> : <Save />}Salvar níveis</Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function Pct({ rotulo, valor, onChange }: { rotulo: string; valor: number; onChange: (v: number) => void }) {
+  return (
+    <div className="relative">
+      <Input type="number" min={0} max={1000} step={0.1} aria-label={rotulo} className="pr-7 text-right" value={valor} onChange={e => onChange(Number(e.target.value))} />
+      <span className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-muted-foreground">%</span>
     </div>
   )
 }
