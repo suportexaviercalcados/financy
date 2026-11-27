@@ -197,7 +197,7 @@ async function importarPedido(c: Contexto, resumo: any, cache: { formas: Map<str
   }
   if (situacao === SITUACAO_PEDIDO_CANCELADO) {
     if (existente && existente.status !== 'cancelada') {
-      const { error } = await c.svc.rpc('fn_cancelar_venda', { p_venda: existente.id })
+      const { error } = await c.svc.rpc('fn_cancelar_venda_bling', { p_venda: existente.id })
       if (error) await c.logar('aviso', `Pedido ${resumo.numero} cancelado no Bling, mas não pôde ser cancelado aqui: ${error.message}`)
       else return true
     }
@@ -325,7 +325,7 @@ async function conciliarVendas(c: Contexto, cache: Awaited<ReturnType<typeof cac
     if (d) { if (await importarPedido(c, d, cache)) c.importados++ }
     else {
       await c.svc.from('vendas').update({ situacao_externa: SITUACAO_PEDIDO_CANCELADO }).eq('id', v.id)
-      const { error } = await c.svc.rpc('fn_cancelar_venda', { p_venda: v.id })
+      const { error } = await c.svc.rpc('fn_cancelar_venda_bling', { p_venda: v.id })
       await c.logar('aviso', error ? `Pedido ${v.numero} excluído no Bling, mas não pôde ser cancelado aqui: ${error.message}`
         : `Pedido ${v.numero} excluído no Bling: venda cancelada.`)
       if (!error) c.importados++
